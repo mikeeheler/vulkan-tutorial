@@ -1,0 +1,20 @@
+{
+    "env": {
+        "myDefaultIncludePath": ["${workspaceFolder}/src", "${workspaceFolder}/include"]
+    },
+    "configurations": [
+        {
+            "name": "Linux",
+            "defines": ["GLFW_INCLUDE_VULKAN"],
+            "compilerPath": "/usr/bin/clang",
+            "intelliSenseMode": "clang-x64",
+            "cStandard": "c99",
+            "cppStandard": "c++17",
+            "includePath": [
+                "${myDefaultIncludePath}",
+                "${workspaceFolder}/ext/vulkan-sdk-1.1.121.1/x86_64/include"
+            ]
+        }
+    ],
+    "version": 4
+}

@@ -7,8 +7,19 @@
 	"settings": {
 		"C_Cpp.default.cppStandard": "c++17",
 		"C_Cpp.default.cStandard": "c99",
+		"C_Cpp.default.defines": [
+			"GLFW_INCLUDE_VULKAN"
+		],
 		"C_Cpp.default.includePath": [
-			"ext/vulkan-sdk-1.1.121.1/x86_64/include"
-		]
+			"${default}",
+			"${workspaceFolder}/include",
+			"${workspaceFolder}/ext/vulkan-sdk-1.1.121.1/x86_64/include"
+		],
+		"files.associations": {
+			"stdexcept": "cpp",
+			"typeinfo": "cpp"
+		},
+		"C_Cpp.loggingLevel": "Debug",
+		"clang.cxxflags": ["-Wno-pragma-once-outside-header"]
 	}
 }
