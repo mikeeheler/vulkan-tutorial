@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <map>
+#include <sstream>
 #include <stdexcept>
 #include <vector>
 
@@ -44,6 +46,14 @@ namespace {
         func(instance, debugMessenger, pAllocator);
     }
 
+    std::string getVersionString(uint32_t version) {
+        std::stringstream out;
+        out << VK_VERSION_MAJOR(version) << '.'
+            << VK_VERSION_MINOR(version) << '.'
+            << VK_VERSION_PATCH(version);
+        return out.str();
+    }
+
     void print_extensions() {
         uint32_t extensionCount = 0u;
         vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
@@ -59,7 +69,12 @@ namespace {
 
 namespace vulkan_tutorial {
     hello_triangle_app::hello_triangle_app()
-        : _instance{new VkInstance()}
+        : _debugMessenger {nullptr},
+          _instance {new VkInstance()},
+          _physicalDevice {VK_NULL_HANDLE},
+          _validationLayers {
+            "VK_LAYER_KHRONOS_validation"
+          }
     {}
 
     hello_triangle_app::~hello_triangle_app() {
@@ -178,6 +193,7 @@ namespace vulkan_tutorial {
     void hello_triangle_app::initVulkan() {
         createInstance();
         setupDebugMessenger();
+        pickPhysicalDevice();
     }
 
     void hello_triangle_app::initWindow() {
@@ -197,6 +213,41 @@ namespace vulkan_tutorial {
         }
     }
 
+    void hello_triangle_app::pickPhysicalDevice() {
+        uint32_t deviceCount = 0u;
+        vkEnumeratePhysicalDevices(*_instance, &deviceCount, nullptr);
+        if (deviceCount == 0u) {
+            throw std::runtime_error("failed to find GPUs with Vulkan support!");
+        }
+
+        std::vector<VkPhysicalDevice> devices(deviceCount);
+        vkEnumeratePhysicalDevices(*_instance, &deviceCount, devices.data());
+
+        std::multimap<int, VkPhysicalDevice> candidates;
+
+        VkPhysicalDeviceProperties deviceProperties;
+        for (int i = 0; i < devices.size(); ++i) {
+            const auto& device = devices[i];
+            vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+            std::cout << "device #" << i << ": " << deviceProperties.deviceName << std::endl;
+            std::cout << "  api      : " << getVersionString(deviceProperties.apiVersion) << std::endl;
+            std::cout << "  driver   : " << getVersionString(deviceProperties.driverVersion) << std::endl;
+            std::cout << "  vendor_id: " << reinterpret_cast<void*>(deviceProperties.vendorID) << std::endl;
+            std::cout << "  device_id: " << reinterpret_cast<void*>(deviceProperties.deviceID) << std::endl;
+
+            int score = rateDeviceSuitability(device);
+            candidates.insert(std::make_pair(score, device));
+        }
+
+        if (candidates.rbegin()->first > 0) {
+            _physicalDevice = candidates.rbegin()->second;
+        }
+        else {
+            throw std::runtime_error("failed to find a suitable GPU!");
+        }
+    }
+
     void hello_triangle_app::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
         createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -207,6 +258,28 @@ namespace vulkan_tutorial {
             | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
             | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
         createInfo.pfnUserCallback = &debugCallback;
+    }
+
+    int hello_triangle_app::rateDeviceSuitability(VkPhysicalDevice device) const {
+        VkPhysicalDeviceFeatures deviceFeatures;
+        VkPhysicalDeviceProperties deviceProperties;
+
+        vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+        vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+        int score = 0;
+
+        if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+            score += 1000;
+        }
+
+        score += deviceProperties.limits.maxImageDimension2D;
+
+        if (!deviceFeatures.geometryShader) {
+            return 0;
+        }
+
+        return score;
     }
 
     void hello_triangle_app::setupDebugMessenger() {

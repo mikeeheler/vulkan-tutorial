@@ -25,11 +25,11 @@ namespace vulkan_tutorial {
 
         VkDebugUtilsMessengerEXT _debugMessenger;
         std::unique_ptr<VkInstance> _instance;
-        const std::vector<const char*> _validationLayers = {
-            "VK_LAYER_KHRONOS_validation"
-        };
+        VkPhysicalDevice _physicalDevice;
+        const std::vector<const char*> _validationLayers;
         scoped_glfw_window _window;
 
+    private:
         static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
             VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
             VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -43,7 +43,9 @@ namespace vulkan_tutorial {
         void initVulkan();
         void initWindow();
         void mainLoop();
+        void pickPhysicalDevice();
         void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
+        int rateDeviceSuitability(VkPhysicalDevice device) const;
         void setupDebugMessenger();
     };
 }
