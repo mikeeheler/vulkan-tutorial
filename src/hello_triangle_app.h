@@ -3,9 +3,18 @@
 #include "scoped_glfw_window.h"
 #include <GLFW/glfw3.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace vulkan_tutorial {
+    struct queue_family_indices {
+        std::optional<uint32_t> graphicsFamily;
+
+        bool isComplete() const {
+            return graphicsFamily.has_value();
+        }
+    };
+
     class hello_triangle_app {
     public:
         hello_triangle_app();
@@ -39,6 +48,7 @@ namespace vulkan_tutorial {
         bool checkValidationLayerSupport() const;
         void cleanup();
         void createInstance();
+        queue_family_indices findQueueFamilies(VkPhysicalDevice device) const;
         std::vector<const char*> getRequiredExtensions() const;
         void initVulkan();
         void initWindow();
@@ -47,5 +57,5 @@ namespace vulkan_tutorial {
         void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
         int rateDeviceSuitability(VkPhysicalDevice device) const;
         void setupDebugMessenger();
-    };
+   };
 }

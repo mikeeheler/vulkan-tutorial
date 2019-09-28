@@ -176,6 +176,33 @@ namespace vulkan_tutorial {
         return VK_FALSE;
     }
 
+    queue_family_indices hello_triangle_app::findQueueFamilies(VkPhysicalDevice device) const {
+        queue_family_indices indices;
+
+        uint32_t queueFamilyCount = 0u;
+        vkGetPhysicalDeviceQueueFamilyProperties2(device, &queueFamilyCount, nullptr);
+
+        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+        int i = 0;
+        for (const auto& queueFamily : queueFamilies) {
+            if (queueFamily.queueCount > 0
+                && (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) == VK_QUEUE_GRAPHICS_BIT)
+            {
+                indices.graphicsFamily = i;
+            }
+
+            if (indices.isComplete()) {
+                break;
+            }
+
+            ++i;
+        }
+
+        return indices;
+    }
+
     std::vector<const char*> hello_triangle_app::getRequiredExtensions() const {
         uint32_t glfwExtensionCount = 0u;
         const char** glfwExtensions;
@@ -267,6 +294,10 @@ namespace vulkan_tutorial {
         vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
         vkGetPhysicalDeviceProperties(device, &deviceProperties);
 
+        if (!deviceFeatures.geometryShader) {
+            return 0;
+        }
+
         int score = 0;
 
         if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
@@ -275,9 +306,9 @@ namespace vulkan_tutorial {
 
         score += deviceProperties.limits.maxImageDimension2D;
 
-        if (!deviceFeatures.geometryShader) {
-            return 0;
-        }
+        queue_family_indices indices = findQueueFamilies(device);
+        if (indices.isComplete())
+            score += 1000;
 
         return score;
     }
