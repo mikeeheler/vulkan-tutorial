@@ -32,11 +32,13 @@ namespace vulkan_tutorial {
         static const bool ENABLE_VALIDATION_LAYERS = true;
         #endif
 
-        VkDebugUtilsMessengerEXT _debugMessenger;
+        scoped_glfw_window _window;
+
         std::unique_ptr<VkInstance> _instance;
+        VkDebugUtilsMessengerEXT _debugMessenger;
+        VkDevice _device;
         VkPhysicalDevice _physicalDevice;
         const std::vector<const char*> _validationLayers;
-        scoped_glfw_window _window;
 
     private:
         static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -47,6 +49,7 @@ namespace vulkan_tutorial {
 
         bool checkValidationLayerSupport() const;
         void cleanup();
+        void createLogicalDevice();
         void createInstance();
         queue_family_indices findQueueFamilies(VkPhysicalDevice device) const;
         std::vector<const char*> getRequiredExtensions() const;

@@ -70,6 +70,7 @@ namespace {
 namespace vulkan_tutorial {
     hello_triangle_app::hello_triangle_app()
         : _debugMessenger {nullptr},
+          _device {VK_NULL_HANDLE},
           _instance {new VkInstance()},
           _physicalDevice {VK_NULL_HANDLE},
           _validationLayers {
@@ -126,7 +127,8 @@ namespace vulkan_tutorial {
             DestroyDebugUtilsMessengerEXT(*_instance, _debugMessenger, nullptr);
         }
 
-        vkDestroyInstance(*_instance.get(), nullptr);
+        vkDestroyDevice(_device, nullptr);
+        vkDestroyInstance(*_instance, nullptr);
         _instance.reset();
         _window.destroy();
         glfwTerminate();
@@ -164,6 +166,40 @@ namespace vulkan_tutorial {
         VkResult result = vkCreateInstance(&createInfo, nullptr, _instance.get());
         if (result != VK_SUCCESS)
             throw std::runtime_error("Failed to create VkInstance");
+    }
+
+    void hello_triangle_app::createLogicalDevice() {
+        queue_family_indices indices = findQueueFamilies(_physicalDevice);
+
+        VkDeviceQueueCreateInfo queueCreateInfo = {};
+        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
+        queueCreateInfo.queueCount = 1u;
+
+        float queuePriority = 1.0f;
+        queueCreateInfo.pQueuePriorities = &queuePriority;
+
+        VkPhysicalDeviceFeatures deviceFeatures = {};
+
+        VkDeviceCreateInfo createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        createInfo.pQueueCreateInfos = &queueCreateInfo;
+        createInfo.queueCreateInfoCount = 1u;
+        createInfo.pEnabledFeatures = &deviceFeatures;
+        createInfo.enabledExtensionCount = 0u;
+
+        if (ENABLE_VALIDATION_LAYERS) {
+            createInfo.enabledLayerCount = static_cast<uint32_t>(_validationLayers.size());
+            createInfo.ppEnabledLayerNames = _validationLayers.data();
+        }
+        else {
+            createInfo.enabledLayerCount = 0u;
+        }
+
+        VkResult result = vkCreateDevice(_physicalDevice, &createInfo, nullptr, &_device);
+        if (result != VK_SUCCESS) {
+            throw std::runtime_error("failed to create logical device!");
+        }
     }
 
     VKAPI_ATTR VkBool32 VKAPI_CALL hello_triangle_app::debugCallback(
@@ -221,6 +257,7 @@ namespace vulkan_tutorial {
         createInstance();
         setupDebugMessenger();
         pickPhysicalDevice();
+        createLogicalDevice();
     }
 
     void hello_triangle_app::initWindow() {
