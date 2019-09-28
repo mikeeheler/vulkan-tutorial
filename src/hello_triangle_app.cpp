@@ -220,6 +220,7 @@ namespace vulkan_tutorial {
             DestroyDebugUtilsMessengerEXT(*_instance, _debugMessenger, nullptr);
         }
 
+        vkDestroyPipeline(_device, _graphicsPipeline, nullptr);
         vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
         vkDestroyRenderPass(_device, _renderPass, nullptr);
 
@@ -237,6 +238,7 @@ namespace vulkan_tutorial {
         _debugMessenger = VK_NULL_HANDLE;
         _device = VK_NULL_HANDLE;
         _instance.reset();
+        _graphicsPipeline = VK_NULL_HANDLE;
         _graphicsQueue = VK_NULL_HANDLE;
         _physicalDevice = VK_NULL_HANDLE;
         _pipelineLayout = VK_NULL_HANDLE;
@@ -356,6 +358,28 @@ namespace vulkan_tutorial {
         VkResult result = vkCreatePipelineLayout(_device, &pipelineLayoutInfo, nullptr, &_pipelineLayout);
         if (result != VK_SUCCESS)
             throw std::runtime_error("failed to create pipeline layout!");
+
+        VkGraphicsPipelineCreateInfo pipelineInfo = {};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 2u;
+        pipelineInfo.pStages = shaderStages;
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pDepthStencilState = nullptr;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = nullptr;
+        pipelineInfo.layout = _pipelineLayout;
+        pipelineInfo.renderPass = _renderPass;
+        pipelineInfo.subpass = 0u;
+        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+        pipelineInfo.basePipelineIndex = -1;
+
+        result = vkCreateGraphicsPipelines(_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_graphicsPipeline);
+        if (result != VK_SUCCESS)
+            throw std::runtime_error("failed to create graphics pipeline");
 
         vkDestroyShaderModule(_device, vertShaderModule, nullptr);
         vkDestroyShaderModule(_device, fragShaderModule, nullptr);
@@ -644,6 +668,8 @@ namespace vulkan_tutorial {
         createLogicalDevice();
         createSwapChain();
         createImageViews();
+        createRenderPass();
+        createGraphicsPipeline();
     }
 
     void hello_triangle_app::initWindow() {

@@ -59,6 +59,7 @@ namespace vulkan_tutorial {
         std::vector<VkImage> _swapchainImages;
         std::vector<VkImageView> _swapchainImageViews;
 
+        VkPipeline _graphicsPipeline;
         VkPipelineLayout _pipelineLayout;
         VkRenderPass _renderPass;
 
