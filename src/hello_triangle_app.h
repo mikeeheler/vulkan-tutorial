@@ -37,6 +37,7 @@ namespace vulkan_tutorial {
         std::unique_ptr<VkInstance> _instance;
         VkDebugUtilsMessengerEXT _debugMessenger;
         VkDevice _device;
+        VkQueue _graphicsQueue;
         VkPhysicalDevice _physicalDevice;
         const std::vector<const char*> _validationLayers;
 

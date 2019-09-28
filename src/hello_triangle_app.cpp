@@ -71,6 +71,7 @@ namespace vulkan_tutorial {
     hello_triangle_app::hello_triangle_app()
         : _debugMessenger {nullptr},
           _device {VK_NULL_HANDLE},
+          _graphicsQueue {VK_NULL_HANDLE},
           _instance {new VkInstance()},
           _physicalDevice {VK_NULL_HANDLE},
           _validationLayers {
@@ -200,6 +201,8 @@ namespace vulkan_tutorial {
         if (result != VK_SUCCESS) {
             throw std::runtime_error("failed to create logical device!");
         }
+
+        vkGetDeviceQueue(_device, indices.graphicsFamily.value(), 0, &_graphicsQueue);
     }
 
     VKAPI_ATTR VkBool32 VKAPI_CALL hello_triangle_app::debugCallback(
