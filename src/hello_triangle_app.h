@@ -17,6 +17,12 @@ namespace vulkan_tutorial {
         }
     };
 
+    struct swap_chain_support_details {
+        VkSurfaceCapabilitiesKHR capabilities;
+        std::vector<VkSurfaceFormatKHR> formats;
+        std::vector<VkPresentModeKHR> presentModes;
+    };
+
     class hello_triangle_app {
     public:
         hello_triangle_app();
@@ -44,7 +50,15 @@ namespace vulkan_tutorial {
         VkQueue _graphicsQueue;
         VkQueue _presentQueue;
 
+        // TODO first candidate for first pass refactor into own class
+        VkSwapchainKHR _swapchain;
+        VkExtent2D _swapchainExtent;
+        VkFormat _swapchainImageFormat;
+        std::vector<VkImage> _swapchainImages;
+        std::vector<VkImageView> _swapchainImageViews;
+
         VkDebugUtilsMessengerEXT _debugMessenger;
+        const std::vector<const char*> _deviceExtensions;
         const std::vector<const char*> _validationLayers;
 
     private:
@@ -54,11 +68,17 @@ namespace vulkan_tutorial {
             const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
             void* pUserData);
 
+        bool checkDeviceExtensionsSupport(VkPhysicalDevice device) const;
         bool checkValidationLayerSupport() const;
+        VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) const;
+        VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) const;
+        VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) const;
         void cleanup();
         void createLogicalDevice();
+        void createImageViews();
         void createInstance();
         void createSurface();
+        void createSwapChain();
         queue_family_indices findQueueFamilies(VkPhysicalDevice device) const;
         std::vector<const char*> getRequiredExtensions() const;
         void initVulkan();
@@ -66,6 +86,7 @@ namespace vulkan_tutorial {
         void mainLoop();
         void pickPhysicalDevice();
         void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) const;
+        swap_chain_support_details querySwapChainSupport(VkPhysicalDevice device) const;
         int rateDeviceSuitability(VkPhysicalDevice device) const;
         void setupDebugMessenger();
    };
