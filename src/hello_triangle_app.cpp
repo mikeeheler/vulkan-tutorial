@@ -74,6 +74,7 @@ namespace vulkan_tutorial {
           _graphicsQueue {VK_NULL_HANDLE},
           _instance {new VkInstance()},
           _physicalDevice {VK_NULL_HANDLE},
+          _surface {VK_NULL_HANDLE},
           _validationLayers {
             "VK_LAYER_KHRONOS_validation"
           }
@@ -129,10 +130,18 @@ namespace vulkan_tutorial {
         }
 
         vkDestroyDevice(_device, nullptr);
+        vkDestroySurfaceKHR(*_instance, _surface, nullptr);
         vkDestroyInstance(*_instance, nullptr);
-        _instance.reset();
         _window.destroy();
         glfwTerminate();
+
+        _debugMessenger = VK_NULL_HANDLE;
+        _device = VK_NULL_HANDLE;
+        _instance.reset();
+        _graphicsQueue = VK_NULL_HANDLE;
+        _physicalDevice = VK_NULL_HANDLE;
+        _surface = VK_NULL_HANDLE;
+        _window = scoped_glfw_window();
     }
 
     void hello_triangle_app::createInstance() {
@@ -205,6 +214,13 @@ namespace vulkan_tutorial {
         vkGetDeviceQueue(_device, indices.graphicsFamily.value(), 0, &_graphicsQueue);
     }
 
+    void hello_triangle_app::createSurface() {
+        VkResult result = glfwCreateWindowSurface(*_instance, _window.get(), nullptr, &_surface);
+        if (result != VK_SUCCESS) {
+            throw std::runtime_error("failed to create window surface!");
+        }
+    }
+
     VKAPI_ATTR VkBool32 VKAPI_CALL hello_triangle_app::debugCallback(
         VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
         VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -259,6 +275,7 @@ namespace vulkan_tutorial {
     void hello_triangle_app::initVulkan() {
         createInstance();
         setupDebugMessenger();
+        createSurface();
         pickPhysicalDevice();
         createLogicalDevice();
     }
@@ -315,7 +332,7 @@ namespace vulkan_tutorial {
         }
     }
 
-    void hello_triangle_app::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
+    void hello_triangle_app::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) const {
         createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
         createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT

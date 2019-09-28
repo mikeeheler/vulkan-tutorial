@@ -34,11 +34,12 @@ namespace vulkan_tutorial {
 
         scoped_glfw_window _window;
 
-        std::unique_ptr<VkInstance> _instance;
         VkDebugUtilsMessengerEXT _debugMessenger;
         VkDevice _device;
+        std::unique_ptr<VkInstance> _instance;
         VkQueue _graphicsQueue;
         VkPhysicalDevice _physicalDevice;
+        VkSurfaceKHR _surface;
         const std::vector<const char*> _validationLayers;
 
     private:
@@ -52,13 +53,14 @@ namespace vulkan_tutorial {
         void cleanup();
         void createLogicalDevice();
         void createInstance();
+        void createSurface();
         queue_family_indices findQueueFamilies(VkPhysicalDevice device) const;
         std::vector<const char*> getRequiredExtensions() const;
         void initVulkan();
         void initWindow();
         void mainLoop();
         void pickPhysicalDevice();
-        void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
+        void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) const;
         int rateDeviceSuitability(VkPhysicalDevice device) const;
         void setupDebugMessenger();
    };
