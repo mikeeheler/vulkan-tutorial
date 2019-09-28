@@ -46,6 +46,8 @@ namespace vulkan_tutorial {
         VkSurfaceKHR _surface;
         VkDevice _device;
         VkPhysicalDevice _physicalDevice;
+        const std::vector<const char*> _deviceExtensions;
+        const std::vector<const char*> _validationLayers;
 
         VkQueue _graphicsQueue;
         VkQueue _presentQueue;
@@ -57,9 +59,9 @@ namespace vulkan_tutorial {
         std::vector<VkImage> _swapchainImages;
         std::vector<VkImageView> _swapchainImageViews;
 
+        VkPipelineLayout _pipelineLayout;
+
         VkDebugUtilsMessengerEXT _debugMessenger;
-        const std::vector<const char*> _deviceExtensions;
-        const std::vector<const char*> _validationLayers;
 
     private:
         static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -74,9 +76,11 @@ namespace vulkan_tutorial {
         VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) const;
         VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) const;
         void cleanup();
-        void createLogicalDevice();
+        void createGraphicsPipeline();
         void createImageViews();
         void createInstance();
+        void createLogicalDevice();
+        VkShaderModule createShaderModule(const std::vector<char>& code);
         void createSurface();
         void createSwapChain();
         queue_family_indices findQueueFamilies(VkPhysicalDevice device) const;

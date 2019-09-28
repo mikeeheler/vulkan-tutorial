@@ -18,3 +18,8 @@ This could be ported to other platforms, but I can't be arsed.
     cd build
     cmake ..
     make
+
+## Generate Shaders
+
+    glslc -fshader-stage=frag src/shaders/psmain.glsl -o build/psmain.spv
+    glslc -fshader-stage=vert src/shaders/vsmain.glsl -o build/vsmain.spv
