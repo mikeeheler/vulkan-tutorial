@@ -9,9 +9,11 @@
 namespace vulkan_tutorial {
     struct queue_family_indices {
         std::optional<uint32_t> graphicsFamily;
+        std::optional<uint32_t> presentFamily;
 
         bool isComplete() const {
-            return graphicsFamily.has_value();
+            return graphicsFamily.has_value()
+                && presentFamily.has_value();
         }
     };
 
@@ -34,12 +36,15 @@ namespace vulkan_tutorial {
 
         scoped_glfw_window _window;
 
-        VkDebugUtilsMessengerEXT _debugMessenger;
-        VkDevice _device;
         std::unique_ptr<VkInstance> _instance;
-        VkQueue _graphicsQueue;
-        VkPhysicalDevice _physicalDevice;
         VkSurfaceKHR _surface;
+        VkDevice _device;
+        VkPhysicalDevice _physicalDevice;
+
+        VkQueue _graphicsQueue;
+        VkQueue _presentQueue;
+
+        VkDebugUtilsMessengerEXT _debugMessenger;
         const std::vector<const char*> _validationLayers;
 
     private:

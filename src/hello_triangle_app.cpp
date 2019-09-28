@@ -7,6 +7,7 @@
 #include <cstring>
 #include <iostream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -74,6 +75,7 @@ namespace vulkan_tutorial {
           _graphicsQueue {VK_NULL_HANDLE},
           _instance {new VkInstance()},
           _physicalDevice {VK_NULL_HANDLE},
+          _presentQueue {VK_NULL_HANDLE},
           _surface {VK_NULL_HANDLE},
           _validationLayers {
             "VK_LAYER_KHRONOS_validation"
@@ -181,20 +183,28 @@ namespace vulkan_tutorial {
     void hello_triangle_app::createLogicalDevice() {
         queue_family_indices indices = findQueueFamilies(_physicalDevice);
 
-        VkDeviceQueueCreateInfo queueCreateInfo = {};
-        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
-        queueCreateInfo.queueCount = 1u;
+        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+        std::set<uint32_t> uniqueQueueFamilies = {
+            indices.graphicsFamily.value(),
+            indices.presentFamily.value()
+        };
 
         float queuePriority = 1.0f;
-        queueCreateInfo.pQueuePriorities = &queuePriority;
+        for (uint32_t queueFamily : uniqueQueueFamilies) {
+            VkDeviceQueueCreateInfo queueCreateInfo = {};
+            queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queueCreateInfo.queueFamilyIndex = queueFamily;
+            queueCreateInfo.queueCount = 1u;
+            queueCreateInfo.pQueuePriorities = &queuePriority;
+            queueCreateInfos.push_back(queueCreateInfo);
+        }
 
         VkPhysicalDeviceFeatures deviceFeatures = {};
 
         VkDeviceCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        createInfo.pQueueCreateInfos = &queueCreateInfo;
-        createInfo.queueCreateInfoCount = 1u;
+        createInfo.pQueueCreateInfos = queueCreateInfos.data();
+        createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pEnabledFeatures = &deviceFeatures;
         createInfo.enabledExtensionCount = 0u;
 
@@ -212,6 +222,7 @@ namespace vulkan_tutorial {
         }
 
         vkGetDeviceQueue(_device, indices.graphicsFamily.value(), 0, &_graphicsQueue);
+        vkGetDeviceQueue(_device, indices.presentFamily.value(), 0, &_presentQueue);
     }
 
     void hello_triangle_app::createSurface() {
@@ -234,25 +245,35 @@ namespace vulkan_tutorial {
     queue_family_indices hello_triangle_app::findQueueFamilies(VkPhysicalDevice device) const {
         queue_family_indices indices;
 
+        std::cout << "findQueueFamilies" << std::endl;
+
         uint32_t queueFamilyCount = 0u;
-        vkGetPhysicalDeviceQueueFamilyProperties2(device, &queueFamilyCount, nullptr);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+        std::cout << "  queueFamilyCount: " << queueFamilyCount << std::endl;
 
         std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
         vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
 
-        int i = 0;
-        for (const auto& queueFamily : queueFamilies) {
+        for (int i = 0; i < queueFamilies.size(); ++i) {
+            const auto& queueFamily = queueFamilies[i];
+
             if (queueFamily.queueCount > 0
                 && (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) == VK_QUEUE_GRAPHICS_BIT)
             {
                 indices.graphicsFamily = i;
+                std::cout << "  graphicsFamily: " << i << std::endl;
+            }
+
+            VkBool32 presentSupport = false;
+            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, _surface, &presentSupport);
+            if (queueFamily.queueCount > 0 && presentSupport) {
+                indices.presentFamily = i;
+                std::cout << "  presentFamily: " << i << std::endl;
             }
 
             if (indices.isComplete()) {
                 break;
             }
-
-            ++i;
         }
 
         return indices;
