@@ -55,6 +55,7 @@ namespace vulkan_tutorial {
         // TODO first candidate for first pass refactor into own class
         VkSwapchainKHR _swapchain;
         VkExtent2D _swapchainExtent;
+        std::vector<VkFramebuffer> _swapchainFramebuffers;
         VkFormat _swapchainImageFormat;
         std::vector<VkImage> _swapchainImages;
         std::vector<VkImageView> _swapchainImageViews;
@@ -78,6 +79,7 @@ namespace vulkan_tutorial {
         VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) const;
         VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) const;
         void cleanup();
+        void createFramebuffers();
         void createGraphicsPipeline();
         void createImageViews();
         void createInstance();

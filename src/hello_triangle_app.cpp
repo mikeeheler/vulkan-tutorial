@@ -96,6 +96,7 @@ namespace vulkan_tutorial {
           _surface {VK_NULL_HANDLE},
           _swapchain {VK_NULL_HANDLE},
           _swapchainExtent {0u, 0u},
+          _swapchainFramebuffers {},
           _swapchainImageFormat {VK_FORMAT_UNDEFINED},
           _swapchainImages {},
           _swapchainImageViews {},
@@ -216,8 +217,8 @@ namespace vulkan_tutorial {
         if (_instance == nullptr)
             return;
 
-        if (ENABLE_VALIDATION_LAYERS) {
-            DestroyDebugUtilsMessengerEXT(*_instance, _debugMessenger, nullptr);
+        for (auto framebuffer : _swapchainFramebuffers) {
+            vkDestroyFramebuffer(_device, framebuffer, nullptr);
         }
 
         vkDestroyPipeline(_device, _graphicsPipeline, nullptr);
@@ -230,7 +231,11 @@ namespace vulkan_tutorial {
 
         vkDestroySwapchainKHR(_device, _swapchain, nullptr);
         vkDestroyDevice(_device, nullptr);
+
         vkDestroySurfaceKHR(*_instance, _surface, nullptr);
+        if (ENABLE_VALIDATION_LAYERS) {
+            DestroyDebugUtilsMessengerEXT(*_instance, _debugMessenger, nullptr);
+        }
         vkDestroyInstance(*_instance, nullptr);
         _window.destroy();
         glfwTerminate();
@@ -245,8 +250,32 @@ namespace vulkan_tutorial {
         _renderPass = VK_NULL_HANDLE;
         _surface = VK_NULL_HANDLE;
         _swapchain = VK_NULL_HANDLE;
+        _swapchainFramebuffers.clear();
         _swapchainImageViews.clear();
         _window = scoped_glfw_window();
+    }
+
+    void hello_triangle_app::createFramebuffers() {
+        _swapchainFramebuffers.resize(_swapchainImageViews.size());
+
+        for (size_t i = 0; i < _swapchainImageViews.size(); ++i) {
+            VkImageView attachments[] = {
+                _swapchainImageViews[i]
+            };
+
+            VkFramebufferCreateInfo framebufferInfo = {};
+            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            framebufferInfo.renderPass = _renderPass;
+            framebufferInfo.attachmentCount = 1u;
+            framebufferInfo.pAttachments = attachments;
+            framebufferInfo.width = _swapchainExtent.width;
+            framebufferInfo.height = _swapchainExtent.height;
+            framebufferInfo.layers = 1u;
+
+            VkResult result = vkCreateFramebuffer(_device, &framebufferInfo, nullptr, &_swapchainFramebuffers[i]);
+            if (result != VK_SUCCESS)
+                throw std::runtime_error("failed to create framebuffer");
+        }
     }
 
     void hello_triangle_app::createGraphicsPipeline() {
@@ -670,6 +699,7 @@ namespace vulkan_tutorial {
         createImageViews();
         createRenderPass();
         createGraphicsPipeline();
+        createFramebuffers();
     }
 
     void hello_triangle_app::initWindow() {
