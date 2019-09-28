@@ -60,6 +60,7 @@ namespace vulkan_tutorial {
         std::vector<VkImageView> _swapchainImageViews;
 
         VkPipelineLayout _pipelineLayout;
+        VkRenderPass _renderPass;
 
         VkDebugUtilsMessengerEXT _debugMessenger;
 
@@ -80,6 +81,7 @@ namespace vulkan_tutorial {
         void createImageViews();
         void createInstance();
         void createLogicalDevice();
+        void createRenderPass();
         VkShaderModule createShaderModule(const std::vector<char>& code);
         void createSurface();
         void createSwapChain();

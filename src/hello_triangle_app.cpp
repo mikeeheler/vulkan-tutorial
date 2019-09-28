@@ -90,8 +90,15 @@ namespace vulkan_tutorial {
           _graphicsQueue {VK_NULL_HANDLE},
           _instance {new VkInstance()},
           _physicalDevice {VK_NULL_HANDLE},
+          _pipelineLayout {VK_NULL_HANDLE},
           _presentQueue {VK_NULL_HANDLE},
+          _renderPass {VK_NULL_HANDLE},
           _surface {VK_NULL_HANDLE},
+          _swapchain {VK_NULL_HANDLE},
+          _swapchainExtent {0u, 0u},
+          _swapchainImageFormat {VK_FORMAT_UNDEFINED},
+          _swapchainImages {},
+          _swapchainImageViews {},
           _validationLayers {
             "VK_LAYER_KHRONOS_validation"
           }
@@ -214,6 +221,7 @@ namespace vulkan_tutorial {
         }
 
         vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
+        vkDestroyRenderPass(_device, _renderPass, nullptr);
 
         for (const auto& imageView: _swapchainImageViews) {
             vkDestroyImageView(_device, imageView, nullptr);
@@ -227,12 +235,15 @@ namespace vulkan_tutorial {
         glfwTerminate();
 
         _debugMessenger = VK_NULL_HANDLE;
-        _swapchain = VK_NULL_HANDLE;
         _device = VK_NULL_HANDLE;
         _instance.reset();
         _graphicsQueue = VK_NULL_HANDLE;
         _physicalDevice = VK_NULL_HANDLE;
+        _pipelineLayout = VK_NULL_HANDLE;
+        _renderPass = VK_NULL_HANDLE;
         _surface = VK_NULL_HANDLE;
+        _swapchain = VK_NULL_HANDLE;
+        _swapchainImageViews.clear();
         _window = scoped_glfw_window();
     }
 
@@ -454,6 +465,38 @@ namespace vulkan_tutorial {
 
         vkGetDeviceQueue(_device, indices.graphicsFamily.value(), 0u, &_graphicsQueue);
         vkGetDeviceQueue(_device, indices.presentFamily.value(), 0u, &_presentQueue);
+    }
+
+    void hello_triangle_app::createRenderPass() {
+        VkAttachmentDescription colorAttachment = {};
+        colorAttachment.format = _swapchainImageFormat;
+        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+        VkAttachmentReference colorAttachmentRef = {};
+        colorAttachmentRef.attachment = 0u;
+        colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        VkSubpassDescription subpass = {};
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = 1u;
+        subpass.pColorAttachments = &colorAttachmentRef;
+
+        VkRenderPassCreateInfo renderPassInfo = {};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        renderPassInfo.attachmentCount = 1u;
+        renderPassInfo.pAttachments = &colorAttachment;
+        renderPassInfo.subpassCount = 1u;
+        renderPassInfo.pSubpasses = &subpass;
+
+        VkResult result = vkCreateRenderPass(_device, &renderPassInfo, nullptr, &_renderPass);
+        if (result != VK_SUCCESS)
+            throw std::runtime_error("failed to create render pass");
     }
 
     VkShaderModule hello_triangle_app::createShaderModule(const std::vector<char>& code) {
