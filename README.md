@@ -36,3 +36,8 @@ https://vulkan-tutorial.com/en/Vertex_buffers/Staging_buffer
   queue families
 * Submit any transfer commands like `vkCmdCopyBuffer` (which we'll be using in this chapter) to the transfer queue
   instead of the graphics queue
+
+https://developer.nvidia.com/vulkan-memory-management
+
+* Refactor index and vertex buffer to share same `VkBuffer`
+*

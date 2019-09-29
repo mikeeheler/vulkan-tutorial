@@ -84,6 +84,10 @@ namespace vulkan_tutorial {
         uint32_t _currentFrame;
         bool _framebufferResized;
 
+        std::vector<uint16_t> _indices;
+        VkBuffer _indexBuffer;
+        VkDeviceMemory _indexBufferMemory;
+
         std::vector<vertex> _vertices;
         VkBuffer _vertexBuffer;
         VkDeviceMemory _vertexBufferMemory;
@@ -117,6 +121,7 @@ namespace vulkan_tutorial {
         void createFramebuffers();
         void createGraphicsPipeline();
         void createImageViews();
+        void createIndexBuffer();
         void createInstance();
         void createLogicalDevice();
         void createRenderPass();

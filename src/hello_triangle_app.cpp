@@ -135,6 +135,9 @@ namespace vulkan_tutorial {
         _graphicsPipeline {VK_NULL_HANDLE},
         _graphicsQueue {VK_NULL_HANDLE},
         _imageAvailableSemaphores {},
+        _indexBuffer {VK_NULL_HANDLE},
+        _indexBufferMemory {VK_NULL_HANDLE},
+        _indices {0, 1, 2, 2, 3, 0},
         _inFlightFences {},
         _instance {new VkInstance()},
         _physicalDevice {VK_NULL_HANDLE},
@@ -155,9 +158,10 @@ namespace vulkan_tutorial {
         _vertexBuffer {VK_NULL_HANDLE},
         _vertexBufferMemory {VK_NULL_HANDLE},
         _vertices {
-            {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-            {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-            {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+            {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+            {{ 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+            {{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},
+            {{-0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}}
         },
         _window {}
     {}
@@ -288,6 +292,8 @@ namespace vulkan_tutorial {
 
         cleanupSwapchain();
 
+        vkDestroyBuffer(_device, _indexBuffer, nullptr);
+        vkFreeMemory(_device, _indexBufferMemory, nullptr);
         vkDestroyBuffer(_device, _vertexBuffer, nullptr);
         vkFreeMemory(_device, _vertexBufferMemory, nullptr);
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
@@ -309,6 +315,8 @@ namespace vulkan_tutorial {
         _debugMessenger = VK_NULL_HANDLE;
         _device = VK_NULL_HANDLE;
         _imageAvailableSemaphores.clear();
+        _indexBuffer = VK_NULL_HANDLE;
+        _indexBufferMemory = VK_NULL_HANDLE;
         _inFlightFences.clear();
         _instance.reset();
         _graphicsQueue = VK_NULL_HANDLE;
@@ -422,12 +430,14 @@ namespace vulkan_tutorial {
             throw std::runtime_error("failed to allocate command buffers");
 
         for (size_t i = 0; i < _commandBuffers.size(); ++i) {
+            const auto& commandBuffer = _commandBuffers[i];
+
             VkCommandBufferBeginInfo beginInfo = {};
             beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
             beginInfo.flags = 0u;
             beginInfo.pInheritanceInfo = nullptr;
 
-            VkResult beginResult = vkBeginCommandBuffer(_commandBuffers[i], &beginInfo);
+            VkResult beginResult = vkBeginCommandBuffer(commandBuffer, &beginInfo);
             if (beginResult != VK_SUCCESS)
                 throw std::runtime_error("failed to begin recording command buffer");
 
@@ -441,15 +451,16 @@ namespace vulkan_tutorial {
             renderPassInfo.clearValueCount = 1u;
             renderPassInfo.pClearValues = &clearColor;
 
-            vkCmdBeginRenderPass(_commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-            vkCmdBindPipeline(_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipeline);
+            vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipeline);
             VkBuffer vertexBuffers[] = {_vertexBuffer};
             VkDeviceSize offsets[] = {0};
-            vkCmdBindVertexBuffers(_commandBuffers[i], 0u, 1u, vertexBuffers, offsets);
-            vkCmdDraw(_commandBuffers[i], static_cast<uint32_t>(_vertices.size()), 1u, 0u, 0u);
-            vkCmdEndRenderPass(_commandBuffers[i]);
+            vkCmdBindVertexBuffers(commandBuffer, 0u, 1u, vertexBuffers, offsets);
+            vkCmdBindIndexBuffer(commandBuffer, _indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(_indices.size()), 1u, 0u, 0u, 0u);
+            vkCmdEndRenderPass(commandBuffer);
 
-            VkResult endResult = vkEndCommandBuffer(_commandBuffers[i]);
+            VkResult endResult = vkEndCommandBuffer(commandBuffer);
             if (endResult != VK_SUCCESS)
                 throw std::runtime_error("failed to record command buffer");
         }
@@ -654,6 +665,38 @@ namespace vulkan_tutorial {
             if (result != VK_SUCCESS)
                 throw std::runtime_error("failed to create swapchain image view");
         }
+    }
+
+    void hello_triangle_app::createIndexBuffer() {
+        VkDeviceSize bufferSize = sizeof(_indices[0]) * _indices.size();
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(
+            bufferSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuffer,
+            stagingBufferMemory
+        );
+
+        void* data;
+        vkMapMemory(_device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        memcpy(data, _indices.data(), static_cast<size_t>(bufferSize));
+        vkUnmapMemory(_device, stagingBufferMemory);
+
+        createBuffer(
+            bufferSize,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            _indexBuffer,
+            _indexBufferMemory
+        );
+
+        copyBuffer(stagingBuffer, _indexBuffer, bufferSize);
+
+        vkDestroyBuffer(_device, stagingBuffer, nullptr);
+        vkFreeMemory(_device, stagingBufferMemory, nullptr);
     }
 
     void hello_triangle_app::createInstance() {
@@ -1065,6 +1108,7 @@ namespace vulkan_tutorial {
         createFramebuffers();
         createCommandPool();
         createVertexBuffer();
+        createIndexBuffer();
         createCommandBuffers();
         createSyncObjects();
     }
