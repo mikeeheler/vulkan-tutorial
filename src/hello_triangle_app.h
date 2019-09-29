@@ -93,7 +93,8 @@ namespace vulkan_tutorial {
             VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
             VkDebugUtilsMessageTypeFlagsEXT messageType,
             const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-            void* pUserData);
+            void* pUserData
+        );
         static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
 
         bool checkDeviceExtensionsSupport(VkPhysicalDevice device) const;
@@ -103,6 +104,13 @@ namespace vulkan_tutorial {
         VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) const;
         void cleanup();
         void cleanupSwapchain();
+        void createBuffer(
+            VkDeviceSize size,
+            VkBufferUsageFlags usage,
+            VkMemoryPropertyFlags properties,
+            VkBuffer& buffer,
+            VkDeviceMemory& bufferMemory
+        );
         void createCommandBuffers();
         void createCommandPool();
         void createFramebuffers();
