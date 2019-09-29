@@ -171,7 +171,10 @@ namespace vulkan_tutorial {
             return capabilities.currentExtent;
         }
 
-        VkExtent2D actualExtent = { INITIAL_WIDTH, INITIAL_HEIGHT };
+        int width, height;
+        glfwGetFramebufferSize(const_cast<GLFWwindow*>(_window.get()), &width, &height);
+
+        VkExtent2D actualExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 
         actualExtent.width = std::max(
             capabilities.minImageExtent.width,
@@ -190,12 +193,12 @@ namespace vulkan_tutorial {
     ) const {
         for (const auto& availablePresentMode : availablePresentModes) {
             if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
-                std::cout << "swap chain: selecting mailbox present mode" << std::endl;
+                std::cout << "swapchain: selecting mailbox present mode" << std::endl;
                 return availablePresentMode;
             }
         }
 
-        std::cout << "swap chain: selecting FIFO present mode" << std::endl;
+        std::cout << "swapchain: selecting FIFO present mode" << std::endl;
         return VK_PRESENT_MODE_FIFO_KHR;
     }
 
@@ -203,7 +206,7 @@ namespace vulkan_tutorial {
         const std::vector<VkSurfaceFormatKHR>& availableFormats
     ) const {
         if (availableFormats.size() == 0) {
-            throw std::runtime_error("no surface formats available for swap chain");
+            throw std::runtime_error("no surface formats available for swapchain");
         }
 
         for (const auto& availableFormat : availableFormats) {
@@ -221,15 +224,41 @@ namespace vulkan_tutorial {
         if (_instance == nullptr)
             return;
 
+        cleanupSwapchain();
+
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
             vkDestroySemaphore(_device, _imageAvailableSemaphores[i], nullptr);
             vkDestroySemaphore(_device, _renderFinishedSemaphores[i], nullptr);
             vkDestroyFence(_device, _inFlightFences[i], nullptr);
         }
         vkDestroyCommandPool(_device, _commandPool, nullptr);
+        vkDestroyDevice(_device, nullptr);
+        if (ENABLE_VALIDATION_LAYERS) {
+            DestroyDebugUtilsMessengerEXT(*_instance, _debugMessenger, nullptr);
+        }
+        vkDestroySurfaceKHR(*_instance, _surface, nullptr);
+        vkDestroyInstance(*_instance, nullptr);
+        _window.destroy();
+        glfwTerminate();
+
+        _commandPool = VK_NULL_HANDLE;
+        _debugMessenger = VK_NULL_HANDLE;
+        _device = VK_NULL_HANDLE;
+        _imageAvailableSemaphores.clear();
+        _inFlightFences.clear();
+        _instance.reset();
+        _graphicsQueue = VK_NULL_HANDLE;
+        _physicalDevice = VK_NULL_HANDLE;
+        _renderFinishedSemaphores.clear();
+        _surface = VK_NULL_HANDLE;
+        _window = scoped_glfw_window();
+    }
+
+    void hello_triangle_app::cleanupSwapchain() {
         for (auto framebuffer : _swapchainFramebuffers) {
             vkDestroyFramebuffer(_device, framebuffer, nullptr);
         }
+        vkFreeCommandBuffers(_device, _commandPool, static_cast<uint32_t>(_commandBuffers.size()), _commandBuffers.data());
         vkDestroyPipeline(_device, _graphicsPipeline, nullptr);
         vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
         vkDestroyRenderPass(_device, _renderPass, nullptr);
@@ -237,33 +266,14 @@ namespace vulkan_tutorial {
             vkDestroyImageView(_device, imageView, nullptr);
         }
         vkDestroySwapchainKHR(_device, _swapchain, nullptr);
-        vkDestroyDevice(_device, nullptr);
-        vkDestroySurfaceKHR(*_instance, _surface, nullptr);
-        if (ENABLE_VALIDATION_LAYERS) {
-            DestroyDebugUtilsMessengerEXT(*_instance, _debugMessenger, nullptr);
-        }
-        vkDestroyInstance(*_instance, nullptr);
-        _window.destroy();
-        glfwTerminate();
 
         _commandBuffers.clear();
-        _commandPool = VK_NULL_HANDLE;
-        _debugMessenger = VK_NULL_HANDLE;
-        _device = VK_NULL_HANDLE;
-        _imageAvailableSemaphores.clear();
-        _inFlightFences.clear();
-        _instance.reset();
         _graphicsPipeline = VK_NULL_HANDLE;
-        _graphicsQueue = VK_NULL_HANDLE;
-        _physicalDevice = VK_NULL_HANDLE;
         _pipelineLayout = VK_NULL_HANDLE;
-        _renderFinishedSemaphores.clear();
         _renderPass = VK_NULL_HANDLE;
-        _surface = VK_NULL_HANDLE;
         _swapchain = VK_NULL_HANDLE;
         _swapchainFramebuffers.clear();
         _swapchainImageViews.clear();
-        _window = scoped_glfw_window();
     }
 
     void hello_triangle_app::createCommandBuffers() {
@@ -486,7 +496,7 @@ namespace vulkan_tutorial {
         _swapchainImageViews.resize(_swapchainImages.size());
 
         for (size_t i = 0; i < _swapchainImages.size(); ++i) {
-            std::cout << "create view for swap chain image #" << i << std::endl;
+            std::cout << "create view for swapchain image #" << i << std::endl;
             VkImageViewCreateInfo createInfo = {};
             createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
             createInfo.image = _swapchainImages[i];
@@ -504,7 +514,7 @@ namespace vulkan_tutorial {
 
             VkResult result = vkCreateImageView(_device, &createInfo, nullptr, &_swapchainImageViews[i]);
             if (result != VK_SUCCESS)
-                throw std::runtime_error("failed to create swap chain image view");
+                throw std::runtime_error("failed to create swapchain image view");
         }
     }
 
@@ -729,7 +739,7 @@ namespace vulkan_tutorial {
 
         VkResult result = vkCreateSwapchainKHR(_device, &createInfo, nullptr, &_swapchain);
         if (result != VK_SUCCESS)
-            throw std::runtime_error("failed to create the swap chain");
+            throw std::runtime_error("failed to create the swapchain");
 
         vkGetSwapchainImagesKHR(_device, _swapchain, &imageCount, nullptr);
         _swapchainImages.resize(imageCount);
@@ -751,11 +761,17 @@ namespace vulkan_tutorial {
 
     void hello_triangle_app::drawFrame() {
         vkWaitForFences(_device, 1u, &_inFlightFences[_currentFrame], VK_TRUE, UINT64_MAX);
-        vkResetFences(_device, 1u, &_inFlightFences[_currentFrame]);
 
         uint32_t imageIndex;
         VkResult result = vkAcquireNextImageKHR(
             _device, _swapchain, UINT64_MAX, _imageAvailableSemaphores[_currentFrame], VK_NULL_HANDLE, &imageIndex);
+        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+            recreateSwapchain();
+            return;
+        }
+        else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+            throw std::runtime_error("failed to acquired swapchain image");
+        }
 
         VkSubmitInfo submitInfo = {};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -771,6 +787,8 @@ namespace vulkan_tutorial {
         VkSemaphore signalSemaphores[] = { _renderFinishedSemaphores[_currentFrame] };
         submitInfo.signalSemaphoreCount = 1u;
         submitInfo.pSignalSemaphores = signalSemaphores;
+
+        vkResetFences(_device, 1u, &_inFlightFences[_currentFrame]);
 
         result = vkQueueSubmit(_graphicsQueue, 1u, &submitInfo, _inFlightFences[_currentFrame]);
         if (result != VK_SUCCESS)
@@ -788,6 +806,13 @@ namespace vulkan_tutorial {
         presentInfo.pResults = nullptr;
 
         result = vkQueuePresentKHR(_presentQueue, &presentInfo);
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+            recreateSwapchain();
+        }
+        else if (result != VK_SUCCESS) {
+            throw std::runtime_error("failed to present swap chain image");
+        }
+
         vkQueueWaitIdle(_presentQueue);
 
         _currentFrame = (_currentFrame + 1u) % MAX_FRAMES_IN_FLIGHT;
