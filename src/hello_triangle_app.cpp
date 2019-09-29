@@ -921,6 +921,7 @@ namespace vulkan_tutorial {
         }
 
         VkPhysicalDeviceFeatures deviceFeatures = {};
+        deviceFeatures.samplerAnisotropy = VK_TRUE;
 
         VkDeviceCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1518,6 +1519,9 @@ namespace vulkan_tutorial {
 
         vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
         vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+        if (!deviceFeatures.samplerAnisotropy)
+            return 0;
 
         int score = 0;
 
