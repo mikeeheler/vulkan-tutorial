@@ -145,7 +145,7 @@ namespace vulkan_tutorial {
         _indexBufferMemory {VK_NULL_HANDLE},
         _indices {0, 1, 2, 2, 3, 0},
         _inFlightFences {},
-        _instance {new VkInstance()},
+        _instance {VK_NULL_HANDLE},
         _physicalDevice {VK_NULL_HANDLE},
         _pipelineLayout {VK_NULL_HANDLE},
         _presentQueue {VK_NULL_HANDLE},
@@ -318,7 +318,7 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::cleanup() {
-        if (_instance == nullptr)
+        if (_instance == VK_NULL_HANDLE)
             return;
 
         cleanupSwapchain();
@@ -340,10 +340,10 @@ namespace vulkan_tutorial {
         vkDestroyCommandPool(_device, _commandPool, nullptr);
         vkDestroyDevice(_device, nullptr);
         if (ENABLE_VALIDATION_LAYERS) {
-            DestroyDebugUtilsMessengerEXT(*_instance, _debugMessenger, nullptr);
+            DestroyDebugUtilsMessengerEXT(_instance, _debugMessenger, nullptr);
         }
-        vkDestroySurfaceKHR(*_instance, _surface, nullptr);
-        vkDestroyInstance(*_instance, nullptr);
+        vkDestroySurfaceKHR(_instance, _surface, nullptr);
+        vkDestroyInstance(_instance, nullptr);
         _window.destroy();
         glfwTerminate();
 
@@ -355,7 +355,7 @@ namespace vulkan_tutorial {
         _indexBuffer = VK_NULL_HANDLE;
         _indexBufferMemory = VK_NULL_HANDLE;
         _inFlightFences.clear();
-        _instance.reset();
+        _instance = VK_NULL_HANDLE;
         _graphicsQueue = VK_NULL_HANDLE;
         _physicalDevice = VK_NULL_HANDLE;
         _renderFinishedSemaphores.clear();
@@ -896,7 +896,7 @@ namespace vulkan_tutorial {
             createInfo.pNext = nullptr;
         }
 
-        VkResult result = vkCreateInstance(&createInfo, nullptr, _instance.get());
+        VkResult result = vkCreateInstance(&createInfo, nullptr, &_instance);
         if (result != VK_SUCCESS)
             throw std::runtime_error("Failed to create VkInstance");
     }
@@ -1032,7 +1032,7 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::createSurface() {
-        VkResult result = glfwCreateWindowSurface(*_instance, _window.get(), nullptr, &_surface);
+        VkResult result = glfwCreateWindowSurface(_instance, _window.get(), nullptr, &_surface);
         if (result != VK_SUCCESS) {
             throw std::runtime_error("failed to create window surface!");
         }
@@ -1429,13 +1429,13 @@ namespace vulkan_tutorial {
 
     void hello_triangle_app::pickPhysicalDevice() {
         uint32_t deviceCount = 0u;
-        vkEnumeratePhysicalDevices(*_instance, &deviceCount, nullptr);
+        vkEnumeratePhysicalDevices(_instance, &deviceCount, nullptr);
         if (deviceCount == 0u) {
             throw std::runtime_error("failed to find GPUs with Vulkan support!");
         }
 
         std::vector<VkPhysicalDevice> devices(deviceCount);
-        vkEnumeratePhysicalDevices(*_instance, &deviceCount, devices.data());
+        vkEnumeratePhysicalDevices(_instance, &deviceCount, devices.data());
 
         std::multimap<int, VkPhysicalDevice> candidates;
 
@@ -1564,7 +1564,7 @@ namespace vulkan_tutorial {
         VkDebugUtilsMessengerCreateInfoEXT createInfo = {};
         populateDebugMessengerCreateInfo(createInfo);
 
-        auto result = CreateDebugUtilsMessengerEXT(*_instance, &createInfo, nullptr, &_debugMessenger);
+        auto result = CreateDebugUtilsMessengerEXT(_instance, &createInfo, nullptr, &_debugMessenger);
         if (result != VK_SUCCESS) {
             throw std::runtime_error("failed to set up the debug messenger!");
         }

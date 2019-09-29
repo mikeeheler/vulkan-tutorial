@@ -59,7 +59,7 @@ namespace vulkan_tutorial {
 
         scoped_glfw_window _window;
 
-        std::unique_ptr<VkInstance> _instance;
+        VkInstance _instance;
         VkSurfaceKHR _surface;
         VkDevice _device;
         VkPhysicalDevice _physicalDevice;

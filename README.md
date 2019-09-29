@@ -2,8 +2,6 @@
 
 Basis: https://vulkan-tutorial.com/Introduction
 
-I tend to do things my own way, so it's not exactly 1:1. But it works.
-
 ## Setup
 
 * Download [Vulkan SDK 1.1.121.1](https://vulkan.lunarg.com/sdk/home#sdk/downloadConfirm/1.1.121.1/linux/vulkansdk-linux-x86_64-1.1.121.1.tar.gz)
