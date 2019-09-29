@@ -84,14 +84,18 @@ namespace {
 
 namespace vulkan_tutorial {
     hello_triangle_app::hello_triangle_app()
-        : _debugMessenger {nullptr},
+        : _currentFrame(0u),
+          _debugMessenger {nullptr},
           _device {VK_NULL_HANDLE},
           _deviceExtensions {VK_KHR_SWAPCHAIN_EXTENSION_NAME},
           _graphicsQueue {VK_NULL_HANDLE},
+          _imageAvailableSemaphores {},
+          _inFlightFences {},
           _instance {new VkInstance()},
           _physicalDevice {VK_NULL_HANDLE},
           _pipelineLayout {VK_NULL_HANDLE},
           _presentQueue {VK_NULL_HANDLE},
+          _renderFinishedSemaphores {},
           _renderPass {VK_NULL_HANDLE},
           _surface {VK_NULL_HANDLE},
           _swapchain {VK_NULL_HANDLE},
@@ -217,21 +221,23 @@ namespace vulkan_tutorial {
         if (_instance == nullptr)
             return;
 
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+            vkDestroySemaphore(_device, _imageAvailableSemaphores[i], nullptr);
+            vkDestroySemaphore(_device, _renderFinishedSemaphores[i], nullptr);
+            vkDestroyFence(_device, _inFlightFences[i], nullptr);
+        }
+        vkDestroyCommandPool(_device, _commandPool, nullptr);
         for (auto framebuffer : _swapchainFramebuffers) {
             vkDestroyFramebuffer(_device, framebuffer, nullptr);
         }
-
         vkDestroyPipeline(_device, _graphicsPipeline, nullptr);
         vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
         vkDestroyRenderPass(_device, _renderPass, nullptr);
-
         for (const auto& imageView: _swapchainImageViews) {
             vkDestroyImageView(_device, imageView, nullptr);
         }
-
         vkDestroySwapchainKHR(_device, _swapchain, nullptr);
         vkDestroyDevice(_device, nullptr);
-
         vkDestroySurfaceKHR(*_instance, _surface, nullptr);
         if (ENABLE_VALIDATION_LAYERS) {
             DestroyDebugUtilsMessengerEXT(*_instance, _debugMessenger, nullptr);
@@ -240,19 +246,81 @@ namespace vulkan_tutorial {
         _window.destroy();
         glfwTerminate();
 
+        _commandBuffers.clear();
+        _commandPool = VK_NULL_HANDLE;
         _debugMessenger = VK_NULL_HANDLE;
         _device = VK_NULL_HANDLE;
+        _imageAvailableSemaphores.clear();
+        _inFlightFences.clear();
         _instance.reset();
         _graphicsPipeline = VK_NULL_HANDLE;
         _graphicsQueue = VK_NULL_HANDLE;
         _physicalDevice = VK_NULL_HANDLE;
         _pipelineLayout = VK_NULL_HANDLE;
+        _renderFinishedSemaphores.clear();
         _renderPass = VK_NULL_HANDLE;
         _surface = VK_NULL_HANDLE;
         _swapchain = VK_NULL_HANDLE;
         _swapchainFramebuffers.clear();
         _swapchainImageViews.clear();
         _window = scoped_glfw_window();
+    }
+
+    void hello_triangle_app::createCommandBuffers() {
+        _commandBuffers.resize(_swapchainFramebuffers.size());
+
+        VkCommandBufferAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = _commandPool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = static_cast<uint32_t>(_commandBuffers.size());
+
+        VkResult result = vkAllocateCommandBuffers(_device, &allocInfo, _commandBuffers.data());
+        if (result != VK_SUCCESS)
+            throw std::runtime_error("failed to allocate command buffers");
+
+        for (size_t i = 0; i < _commandBuffers.size(); ++i) {
+            VkCommandBufferBeginInfo beginInfo = {};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            beginInfo.flags = 0u;
+            beginInfo.pInheritanceInfo = nullptr;
+
+            VkResult beginResult = vkBeginCommandBuffer(_commandBuffers[i], &beginInfo);
+            if (beginResult != VK_SUCCESS)
+                throw std::runtime_error("failed to begin recording command buffer");
+
+            VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+            VkRenderPassBeginInfo renderPassInfo = {};
+            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            renderPassInfo.renderPass = _renderPass;
+            renderPassInfo.framebuffer = _swapchainFramebuffers[i];
+            renderPassInfo.renderArea.offset = { 0, 0 };
+            renderPassInfo.renderArea.extent = _swapchainExtent;
+            renderPassInfo.clearValueCount = 1u;
+            renderPassInfo.pClearValues = &clearColor;
+
+            vkCmdBeginRenderPass(_commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipeline);
+            vkCmdDraw(_commandBuffers[i], 3u, 1u, 0u, 0u);
+            vkCmdEndRenderPass(_commandBuffers[i]);
+
+            VkResult endResult = vkEndCommandBuffer(_commandBuffers[i]);
+            if (endResult != VK_SUCCESS)
+                throw std::runtime_error("failed to record command buffer");
+        }
+    }
+
+    void hello_triangle_app::createCommandPool() {
+        queue_family_indices queueFamilyIndices = findQueueFamilies(_physicalDevice);
+
+        VkCommandPoolCreateInfo poolInfo = {};
+        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+        poolInfo.flags = 0u;
+
+        VkResult result = vkCreateCommandPool(_device, &poolInfo, nullptr, &_commandPool);
+        if (result != VK_SUCCESS)
+            throw std::runtime_error("failed to create command pool");
     }
 
     void hello_triangle_app::createFramebuffers() {
@@ -540,16 +608,54 @@ namespace vulkan_tutorial {
         subpass.colorAttachmentCount = 1u;
         subpass.pColorAttachments = &colorAttachmentRef;
 
+        VkSubpassDependency dependency = {};
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0u;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask = 0u;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
+            | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
         VkRenderPassCreateInfo renderPassInfo = {};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = 1u;
         renderPassInfo.pAttachments = &colorAttachment;
         renderPassInfo.subpassCount = 1u;
         renderPassInfo.pSubpasses = &subpass;
+        renderPassInfo.dependencyCount = 1u;
+        renderPassInfo.pDependencies = &dependency;
 
         VkResult result = vkCreateRenderPass(_device, &renderPassInfo, nullptr, &_renderPass);
         if (result != VK_SUCCESS)
             throw std::runtime_error("failed to create render pass");
+    }
+
+    void hello_triangle_app::createSyncObjects() {
+        _imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        _renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        _inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
+        VkSemaphoreCreateInfo semaphoreInfo = {};
+        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+        VkFenceCreateInfo fenceInfo = {};
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+            VkResult result = vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &_imageAvailableSemaphores[i]);
+            if (result != VK_SUCCESS)
+                throw std::runtime_error("failed to create image available semaphore");
+
+            result = vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &_renderFinishedSemaphores[i]);
+            if (result != VK_SUCCESS)
+                throw std::runtime_error("failed to create render finished semaphore");
+
+            result = vkCreateFence(_device, &fenceInfo, nullptr, &_inFlightFences[i]);
+            if (result != VK_SUCCESS)
+                throw std::runtime_error("failed to create in-flight fence");
+        }
     }
 
     VkShaderModule hello_triangle_app::createShaderModule(const std::vector<char>& code) {
@@ -573,15 +679,15 @@ namespace vulkan_tutorial {
         }
     }
 
-    void hello_triangle_app::createSwapChain() {
-        swap_chain_support_details swapchainSupport = querySwapChainSupport(_physicalDevice);
+    void hello_triangle_app::createSwapchain() {
+        swap_chain_support_details swapchainSupport = querySwapchainSupport(_physicalDevice);
 
         VkExtent2D extent = chooseSwapExtent(swapchainSupport.capabilities);
         VkPresentModeKHR presentMode = chooseSwapPresentMode(swapchainSupport.presentModes);
         VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapchainSupport.formats);
 
-        //uint32_t imageCount = swapchainSupport.capabilities.maxImageCount;
-        uint32_t imageCount = swapchainSupport.capabilities.minImageCount;
+        uint32_t imageCount = swapchainSupport.capabilities.maxImageCount;
+        //uint32_t imageCount = swapchainSupport.capabilities.minImageCount;
         if (swapchainSupport.capabilities.maxImageCount > 0u
             && imageCount > swapchainSupport.capabilities.maxImageCount
         ) {
@@ -643,6 +749,50 @@ namespace vulkan_tutorial {
         return VK_FALSE;
     }
 
+    void hello_triangle_app::drawFrame() {
+        vkWaitForFences(_device, 1u, &_inFlightFences[_currentFrame], VK_TRUE, UINT64_MAX);
+        vkResetFences(_device, 1u, &_inFlightFences[_currentFrame]);
+
+        uint32_t imageIndex;
+        VkResult result = vkAcquireNextImageKHR(
+            _device, _swapchain, UINT64_MAX, _imageAvailableSemaphores[_currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+        VkSubmitInfo submitInfo = {};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+        VkSemaphore waitSemaphores[] = { _imageAvailableSemaphores[_currentFrame] };
+        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+        submitInfo.waitSemaphoreCount = 1u;
+        submitInfo.pWaitSemaphores = waitSemaphores;
+        submitInfo.pWaitDstStageMask = waitStages;
+        submitInfo.commandBufferCount = 1u;
+        submitInfo.pCommandBuffers = &_commandBuffers[imageIndex];
+
+        VkSemaphore signalSemaphores[] = { _renderFinishedSemaphores[_currentFrame] };
+        submitInfo.signalSemaphoreCount = 1u;
+        submitInfo.pSignalSemaphores = signalSemaphores;
+
+        result = vkQueueSubmit(_graphicsQueue, 1u, &submitInfo, _inFlightFences[_currentFrame]);
+        if (result != VK_SUCCESS)
+            throw std::runtime_error("failed to submit draw command buffer");
+
+        VkPresentInfoKHR presentInfo = {};
+        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        presentInfo.waitSemaphoreCount = 1u;
+        presentInfo.pWaitSemaphores = signalSemaphores;
+
+        VkSwapchainKHR swapchains[] = { _swapchain };
+        presentInfo.swapchainCount = 1u;
+        presentInfo.pSwapchains = swapchains;
+        presentInfo.pImageIndices = &imageIndex;
+        presentInfo.pResults = nullptr;
+
+        result = vkQueuePresentKHR(_presentQueue, &presentInfo);
+        vkQueueWaitIdle(_presentQueue);
+
+        _currentFrame = (_currentFrame + 1u) % MAX_FRAMES_IN_FLIGHT;
+    }
+
     queue_family_indices hello_triangle_app::findQueueFamilies(VkPhysicalDevice device) const {
         queue_family_indices indices;
 
@@ -695,11 +845,14 @@ namespace vulkan_tutorial {
         createSurface();
         pickPhysicalDevice();
         createLogicalDevice();
-        createSwapChain();
+        createSwapchain();
         createImageViews();
         createRenderPass();
         createGraphicsPipeline();
         createFramebuffers();
+        createCommandPool();
+        createCommandBuffers();
+        createSyncObjects();
     }
 
     void hello_triangle_app::initWindow() {
@@ -716,7 +869,10 @@ namespace vulkan_tutorial {
     void hello_triangle_app::mainLoop() {
         while (glfwWindowShouldClose(_window.get()) == GLFW_FALSE) {
             glfwPollEvents();
+            drawFrame();
         }
+
+        vkDeviceWaitIdle(_device);
     }
 
     void hello_triangle_app::pickPhysicalDevice() {
@@ -766,7 +922,7 @@ namespace vulkan_tutorial {
         createInfo.pfnUserCallback = &debugCallback;
     }
 
-    swap_chain_support_details hello_triangle_app::querySwapChainSupport(VkPhysicalDevice device) const {
+    swap_chain_support_details hello_triangle_app::querySwapchainSupport(VkPhysicalDevice device) const {
         swap_chain_support_details details;
 
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, _surface, &details.capabilities);
@@ -793,9 +949,9 @@ namespace vulkan_tutorial {
             return 0;
         }
 
-        swap_chain_support_details swapChainSupport = querySwapChainSupport(device);
-        if (swapChainSupport.formats.empty()
-            || swapChainSupport.presentModes.empty())
+        swap_chain_support_details swapchainSupport = querySwapchainSupport(device);
+        if (swapchainSupport.formats.empty()
+            || swapchainSupport.presentModes.empty())
         {
             return 0;
         }
@@ -820,6 +976,19 @@ namespace vulkan_tutorial {
 
 
         return score;
+    }
+
+    void hello_triangle_app::recreateSwapchain() {
+        vkDeviceWaitIdle(_device);
+
+        cleanupSwapchain();
+
+        createSwapchain();
+        createImageViews();
+        createRenderPass();
+        createGraphicsPipeline();
+        createFramebuffers();
+        createCommandBuffers();
     }
 
     void hello_triangle_app::setupDebugMessenger() {

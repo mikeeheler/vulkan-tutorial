@@ -31,14 +31,15 @@ namespace vulkan_tutorial {
         void run();
 
     private:
-        static const int INITIAL_HEIGHT = 600;
-        static const int INITIAL_WIDTH = 800;
-
         #ifdef NDEBUG
         static const bool ENABLE_VALIDATION_LAYERS = false;
         #else
         static const bool ENABLE_VALIDATION_LAYERS = true;
         #endif
+
+        static const int INITIAL_HEIGHT = 600;
+        static const int INITIAL_WIDTH = 800;
+        static const int MAX_FRAMES_IN_FLIGHT = 8;
 
         scoped_glfw_window _window;
 
@@ -52,6 +53,8 @@ namespace vulkan_tutorial {
         VkQueue _graphicsQueue;
         VkQueue _presentQueue;
 
+        VkDebugUtilsMessengerEXT _debugMessenger;
+
         // TODO first candidate for first pass refactor into own class
         VkSwapchainKHR _swapchain;
         VkExtent2D _swapchainExtent;
@@ -60,11 +63,16 @@ namespace vulkan_tutorial {
         std::vector<VkImage> _swapchainImages;
         std::vector<VkImageView> _swapchainImageViews;
 
+        std::vector<VkCommandBuffer> _commandBuffers;
+        VkCommandPool _commandPool;
         VkPipeline _graphicsPipeline;
         VkPipelineLayout _pipelineLayout;
         VkRenderPass _renderPass;
 
-        VkDebugUtilsMessengerEXT _debugMessenger;
+        std::vector<VkSemaphore> _imageAvailableSemaphores;
+        std::vector<VkSemaphore> _renderFinishedSemaphores;
+        std::vector<VkFence> _inFlightFences;
+        uint32_t _currentFrame;
 
     private:
         static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -79,15 +87,20 @@ namespace vulkan_tutorial {
         VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) const;
         VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) const;
         void cleanup();
+        void cleanupSwapchain();
+        void createCommandBuffers();
+        void createCommandPool();
         void createFramebuffers();
         void createGraphicsPipeline();
         void createImageViews();
         void createInstance();
         void createLogicalDevice();
         void createRenderPass();
+        void createSyncObjects();
         VkShaderModule createShaderModule(const std::vector<char>& code);
         void createSurface();
-        void createSwapChain();
+        void createSwapchain();
+        void drawFrame();
         queue_family_indices findQueueFamilies(VkPhysicalDevice device) const;
         std::vector<const char*> getRequiredExtensions() const;
         void initVulkan();
@@ -95,8 +108,9 @@ namespace vulkan_tutorial {
         void mainLoop();
         void pickPhysicalDevice();
         void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) const;
-        swap_chain_support_details querySwapChainSupport(VkPhysicalDevice device) const;
+        swap_chain_support_details querySwapchainSupport(VkPhysicalDevice device) const;
         int rateDeviceSuitability(VkPhysicalDevice device) const;
+        void recreateSwapchain();
         void setupDebugMessenger();
    };
 }
