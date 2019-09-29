@@ -73,6 +73,7 @@ namespace vulkan_tutorial {
         std::vector<VkSemaphore> _renderFinishedSemaphores;
         std::vector<VkFence> _inFlightFences;
         uint32_t _currentFrame;
+        bool _framebufferResized;
 
     private:
         static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -80,6 +81,7 @@ namespace vulkan_tutorial {
             VkDebugUtilsMessageTypeFlagsEXT messageType,
             const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
             void* pUserData);
+        static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
 
         bool checkDeviceExtensionsSupport(VkPhysicalDevice device) const;
         bool checkValidationLayerSupport() const;

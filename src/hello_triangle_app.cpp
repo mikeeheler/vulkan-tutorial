@@ -88,6 +88,7 @@ namespace vulkan_tutorial {
           _debugMessenger {nullptr},
           _device {VK_NULL_HANDLE},
           _deviceExtensions {VK_KHR_SWAPCHAIN_EXTENSION_NAME},
+          _framebufferResized {false},
           _graphicsQueue {VK_NULL_HANDLE},
           _imageAvailableSemaphores {},
           _inFlightFences {},
@@ -759,6 +760,11 @@ namespace vulkan_tutorial {
         return VK_FALSE;
     }
 
+    void hello_triangle_app::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+        auto app = reinterpret_cast<hello_triangle_app*>(glfwGetWindowUserPointer(window));
+        app->_framebufferResized = true;
+    }
+
     void hello_triangle_app::drawFrame() {
         vkWaitForFences(_device, 1u, &_inFlightFences[_currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -806,7 +812,7 @@ namespace vulkan_tutorial {
         presentInfo.pResults = nullptr;
 
         result = vkQueuePresentKHR(_presentQueue, &presentInfo);
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || _framebufferResized) {
             recreateSwapchain();
         }
         else if (result != VK_SUCCESS) {
@@ -889,6 +895,8 @@ namespace vulkan_tutorial {
 
         _window = scoped_glfw_window();
         _window.init(INITIAL_WIDTH, INITIAL_HEIGHT, "Vulkan Test");
+        glfwSetWindowUserPointer(_window.get(), this);
+        glfwSetFramebufferSizeCallback(_window.get(), framebufferResizeCallback);
     }
 
     void hello_triangle_app::mainLoop() {
@@ -1004,6 +1012,12 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::recreateSwapchain() {
+        int width = 0, height = 0;
+        while (width == 0 || height == 0) {
+            glfwGetFramebufferSize(_window.get(), &width, &height);
+            glfwWaitEvents();
+        }
+
         vkDeviceWaitIdle(_device);
 
         cleanupSwapchain();
