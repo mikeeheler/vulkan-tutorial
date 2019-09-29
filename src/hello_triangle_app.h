@@ -34,8 +34,9 @@ namespace vulkan_tutorial {
     struct vertex {
         glm::vec2 pos;
         glm::vec3 color;
+        glm::vec2 texCoord;
 
-        static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions();
+        static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions();
         static VkVertexInputBindingDescription getBindingDescription();
     };
 
