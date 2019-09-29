@@ -161,6 +161,7 @@ namespace vulkan_tutorial {
         _textureImage {VK_NULL_HANDLE},
         _textureImageMemory {VK_NULL_HANDLE},
         _textureImageView {VK_NULL_HANDLE},
+        _textureSampler {VK_NULL_HANDLE},
         _uniformBuffers {},
         _uniformBuffersMemory {},
         _validationLayers {
@@ -322,6 +323,7 @@ namespace vulkan_tutorial {
 
         cleanupSwapchain();
 
+        vkDestroySampler(_device, _textureSampler, nullptr);
         vkDestroyImageView(_device, _textureImageView, nullptr);
         vkDestroyImage(_device, _textureImage, nullptr);
         vkFreeMemory(_device, _textureImageMemory, nullptr);
@@ -361,6 +363,7 @@ namespace vulkan_tutorial {
         _textureImage = VK_NULL_HANDLE;
         _textureImageMemory = VK_NULL_HANDLE;
         _textureImageView = VK_NULL_HANDLE;
+        _textureSampler = VK_NULL_HANDLE;
         _vertexBuffer = VK_NULL_HANDLE;
         _vertexBufferMemory = VK_NULL_HANDLE;
         _window = scoped_glfw_window();
@@ -1167,6 +1170,30 @@ namespace vulkan_tutorial {
         _textureImageView = createImageView(_textureImage, VK_FORMAT_R8G8B8A8_UNORM);
     }
 
+    void hello_triangle_app::createTextureSampler() {
+        VkSamplerCreateInfo samplerInfo = {};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        samplerInfo.anisotropyEnable = VK_TRUE;
+        samplerInfo.maxAnisotropy = 16.0f;
+        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = 1.0f;
+
+        VkResult result = vkCreateSampler(_device, &samplerInfo, nullptr, &_textureSampler);
+        if (result != VK_SUCCESS)
+            throw std::runtime_error("failed to create texture sampler");
+    }
+
     void hello_triangle_app::createVertexBuffer() {
         VkDeviceSize bufferSize = sizeof(_vertices[0]) * _vertices.size();
 
@@ -1368,6 +1395,7 @@ namespace vulkan_tutorial {
         createCommandPool();
         createTextureImage();
         createTextureImageView();
+        createTextureSampler();
         createVertexBuffer();
         createIndexBuffer();
         createUniformBuffers();

@@ -100,6 +100,7 @@ namespace vulkan_tutorial {
         VkImage _textureImage;
         VkDeviceMemory _textureImageMemory;
         VkImageView _textureImageView;
+        VkSampler _textureSampler;
 
         std::vector<vertex> _vertices;
         VkBuffer _vertexBuffer;
@@ -162,6 +163,7 @@ namespace vulkan_tutorial {
         void createSwapchain();
         void createTextureImage();
         void createTextureImageView();
+        void createTextureSampler();
         void createUniformBuffers();
         void createVertexBuffer();
         void drawFrame();
