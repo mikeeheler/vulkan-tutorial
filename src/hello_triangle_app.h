@@ -25,6 +25,12 @@ namespace vulkan_tutorial {
         std::vector<VkPresentModeKHR> presentModes;
     };
 
+    struct uniform_buffer_object {
+        alignas(16) glm::mat4 model;
+        alignas(16) glm::mat4 view;
+        alignas(16) glm::mat4 proj;
+    };
+
     struct vertex {
         glm::vec2 pos;
         glm::vec3 color;
@@ -68,6 +74,9 @@ namespace vulkan_tutorial {
         // TODO first candidate for first pass refactor into own class
         VkCommandPool _commandPool;
         VkPipeline _graphicsPipeline;
+        VkDescriptorPool _descriptorPool;
+        VkDescriptorSetLayout _descriptorSetLayout;
+        std::vector<VkDescriptorSet> _descriptorSets;
         VkPipelineLayout _pipelineLayout;
         VkRenderPass _renderPass;
         VkSwapchainKHR _swapchain;
@@ -91,6 +100,9 @@ namespace vulkan_tutorial {
         std::vector<vertex> _vertices;
         VkBuffer _vertexBuffer;
         VkDeviceMemory _vertexBufferMemory;
+
+        std::vector<VkBuffer> _uniformBuffers;
+        std::vector<VkDeviceMemory> _uniformBuffersMemory;
 
     private:
         static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -118,6 +130,9 @@ namespace vulkan_tutorial {
         );
         void createCommandBuffers();
         void createCommandPool();
+        void createDescriptorPool();
+        void createDescriptorSetLayout();
+        void createDescriptorSets();
         void createFramebuffers();
         void createGraphicsPipeline();
         void createImageViews();
@@ -129,6 +144,7 @@ namespace vulkan_tutorial {
         VkShaderModule createShaderModule(const std::vector<char>& code);
         void createSurface();
         void createSwapchain();
+        void createUniformBuffers();
         void createVertexBuffer();
         void drawFrame();
         uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
@@ -143,5 +159,6 @@ namespace vulkan_tutorial {
         int rateDeviceSuitability(VkPhysicalDevice device) const;
         void recreateSwapchain();
         void setupDebugMessenger();
+        void updateUniformBuffer(uint32_t imageIndex);
    };
 }

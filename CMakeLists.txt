@@ -11,7 +11,7 @@ set(vulkan_tutorial_SOURCES
 
 find_package(glfw3 3.2)
 
-add_definitions(-DGLFW_INCLUDE_VULKAN)
+add_definitions(-DGLFW_INCLUDE_VULKAN -DGLM_FORCE_RADIANS)
 
 include_directories("include" "${VULKAN_SDK_DIR}/include")
 link_directories("${VULKAN_SDK_DIR}/lib")

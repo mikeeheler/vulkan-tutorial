@@ -5,7 +5,7 @@
     "configurations": [
         {
             "name": "Linux",
-            "defines": ["GLFW_INCLUDE_VULKAN"],
+            "defines": ["GLFW_INCLUDE_VULKAN", "GLM_FORCE_RADIANS"],
             "compilerPath": "/usr/bin/clang",
             "intelliSenseMode": "clang-x64",
             "cStandard": "c99",
