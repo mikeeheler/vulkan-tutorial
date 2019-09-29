@@ -39,7 +39,7 @@ namespace vulkan_tutorial {
 
         static const int INITIAL_HEIGHT = 600;
         static const int INITIAL_WIDTH = 800;
-        static const int MAX_FRAMES_IN_FLIGHT = 8;
+        static const int MAX_FRAMES_IN_FLIGHT = 3;
 
         scoped_glfw_window _window;
 
@@ -56,6 +56,10 @@ namespace vulkan_tutorial {
         VkDebugUtilsMessengerEXT _debugMessenger;
 
         // TODO first candidate for first pass refactor into own class
+        VkCommandPool _commandPool;
+        VkPipeline _graphicsPipeline;
+        VkPipelineLayout _pipelineLayout;
+        VkRenderPass _renderPass;
         VkSwapchainKHR _swapchain;
         VkExtent2D _swapchainExtent;
         std::vector<VkFramebuffer> _swapchainFramebuffers;
@@ -64,11 +68,6 @@ namespace vulkan_tutorial {
         std::vector<VkImageView> _swapchainImageViews;
 
         std::vector<VkCommandBuffer> _commandBuffers;
-        VkCommandPool _commandPool;
-        VkPipeline _graphicsPipeline;
-        VkPipelineLayout _pipelineLayout;
-        VkRenderPass _renderPass;
-
         std::vector<VkSemaphore> _imageAvailableSemaphores;
         std::vector<VkSemaphore> _renderFinishedSemaphores;
         std::vector<VkFence> _inFlightFences;

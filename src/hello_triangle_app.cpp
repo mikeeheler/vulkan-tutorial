@@ -49,6 +49,19 @@ namespace {
         func(instance, debugMessenger, pAllocator);
     }
 
+    const char* getPresentModeName(VkPresentModeKHR presentMode) {
+        #define PRESENT_CASE(x) case VK_PRESENT_MODE_ ## x ## _KHR: return "VK_PRESENT_MODE_" #x "_KHR"
+        switch (presentMode) {
+            PRESENT_CASE(IMMEDIATE);
+            PRESENT_CASE(MAILBOX);
+            PRESENT_CASE(FIFO);
+            PRESENT_CASE(FIFO_RELAXED);
+            PRESENT_CASE(SHARED_DEMAND_REFRESH);
+            PRESENT_CASE(SHARED_CONTINUOUS_REFRESH);
+        }
+        return "Unknown Present Mode";
+    }
+
     std::string getVersionString(uint32_t version) {
         std::stringstream out;
         out << VK_VERSION_MAJOR(version) << '.'
@@ -65,7 +78,7 @@ namespace {
 
         std::cout << "available extensions:" << std::endl;
         for (const auto& extension : extensions) {
-            std::cout << '\t' << extension.extensionName << std::endl;
+            std::cout << "  " << extension.extensionName << std::endl;
         }
     }
 
@@ -84,30 +97,36 @@ namespace {
 
 namespace vulkan_tutorial {
     hello_triangle_app::hello_triangle_app()
-        : _currentFrame(0u),
-          _debugMessenger {nullptr},
-          _device {VK_NULL_HANDLE},
-          _deviceExtensions {VK_KHR_SWAPCHAIN_EXTENSION_NAME},
-          _framebufferResized {false},
-          _graphicsQueue {VK_NULL_HANDLE},
-          _imageAvailableSemaphores {},
-          _inFlightFences {},
-          _instance {new VkInstance()},
-          _physicalDevice {VK_NULL_HANDLE},
-          _pipelineLayout {VK_NULL_HANDLE},
-          _presentQueue {VK_NULL_HANDLE},
-          _renderFinishedSemaphores {},
-          _renderPass {VK_NULL_HANDLE},
-          _surface {VK_NULL_HANDLE},
-          _swapchain {VK_NULL_HANDLE},
-          _swapchainExtent {0u, 0u},
-          _swapchainFramebuffers {},
-          _swapchainImageFormat {VK_FORMAT_UNDEFINED},
-          _swapchainImages {},
-          _swapchainImageViews {},
-          _validationLayers {
+      : _commandBuffers {},
+        _commandPool {VK_NULL_HANDLE},
+        _currentFrame(0u),
+        _debugMessenger {nullptr},
+        _device {VK_NULL_HANDLE},
+        _deviceExtensions {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        },
+        _framebufferResized {false},
+        _graphicsPipeline {VK_NULL_HANDLE},
+        _graphicsQueue {VK_NULL_HANDLE},
+        _imageAvailableSemaphores {},
+        _inFlightFences {},
+        _instance {new VkInstance()},
+        _physicalDevice {VK_NULL_HANDLE},
+        _pipelineLayout {VK_NULL_HANDLE},
+        _presentQueue {VK_NULL_HANDLE},
+        _renderFinishedSemaphores {},
+        _renderPass {VK_NULL_HANDLE},
+        _surface {VK_NULL_HANDLE},
+        _swapchain {VK_NULL_HANDLE},
+        _swapchainExtent {0u, 0u},
+        _swapchainFramebuffers {},
+        _swapchainImageFormat {VK_FORMAT_UNDEFINED},
+        _swapchainImages {},
+        _swapchainImageViews {},
+        _validationLayers {
             "VK_LAYER_KHRONOS_validation"
-          }
+        },
+        _window {}
     {}
 
     hello_triangle_app::~hello_triangle_app() {
@@ -146,7 +165,7 @@ namespace vulkan_tutorial {
 
         std::cout << "validation layers:" << std::endl;
         for (const auto& layerProperties : availableLayers) {
-            std::cout << '\t' << layerProperties.layerName << std::endl;
+            std::cout << "  " << layerProperties.layerName << std::endl;
         }
 
         for (const char* layerName : _validationLayers) {
@@ -192,15 +211,24 @@ namespace vulkan_tutorial {
     VkPresentModeKHR hello_triangle_app::chooseSwapPresentMode(
         const std::vector<VkPresentModeKHR>& availablePresentModes
     ) const {
-        for (const auto& availablePresentMode : availablePresentModes) {
-            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
-                std::cout << "swapchain: selecting mailbox present mode" << std::endl;
-                return availablePresentMode;
+        std::vector<VkPresentModeKHR> sortedModes(availablePresentModes.begin(), availablePresentModes.end());
+        std::sort(sortedModes.begin(), sortedModes.end());
+
+        std::vector<VkPresentModeKHR> preferredModes {
+            VK_PRESENT_MODE_MAILBOX_KHR,
+            VK_PRESENT_MODE_IMMEDIATE_KHR,
+            VK_PRESENT_MODE_FIFO_RELAXED_KHR,
+            VK_PRESENT_MODE_FIFO_KHR
+        };
+
+        for (const auto& preferredMode : preferredModes) {
+            if (std::binary_search(sortedModes.begin(), sortedModes.end(), preferredMode)) {
+                std::cout << "swapchain: selecting present mode: " << getPresentModeName(preferredMode) << std::endl;
+                return preferredMode;
             }
         }
 
-        std::cout << "swapchain: selecting FIFO present mode" << std::endl;
-        return VK_PRESENT_MODE_FIFO_KHR;
+        throw std::runtime_error("no available present modes");
     }
 
     VkSurfaceFormatKHR hello_triangle_app::chooseSwapSurfaceFormat(
@@ -269,6 +297,7 @@ namespace vulkan_tutorial {
         vkDestroySwapchainKHR(_device, _swapchain, nullptr);
 
         _commandBuffers.clear();
+        _framebufferResized = false;
         _graphicsPipeline = VK_NULL_HANDLE;
         _pipelineLayout = VK_NULL_HANDLE;
         _renderPass = VK_NULL_HANDLE;
@@ -697,8 +726,8 @@ namespace vulkan_tutorial {
         VkPresentModeKHR presentMode = chooseSwapPresentMode(swapchainSupport.presentModes);
         VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapchainSupport.formats);
 
-        uint32_t imageCount = swapchainSupport.capabilities.maxImageCount;
-        //uint32_t imageCount = swapchainSupport.capabilities.minImageCount;
+        // uint32_t imageCount = swapchainSupport.capabilities.maxImageCount;
+        uint32_t imageCount = swapchainSupport.capabilities.minImageCount;
         if (swapchainSupport.capabilities.maxImageCount > 0u
             && imageCount > swapchainSupport.capabilities.maxImageCount
         ) {
@@ -972,6 +1001,11 @@ namespace vulkan_tutorial {
         if (presentModeCount > 0u) {
             details.presentModes.resize(presentModeCount);
             vkGetPhysicalDeviceSurfacePresentModesKHR(device, _surface, &presentModeCount, details.presentModes.data());
+        }
+
+        std::cout << "available present modes:" << std::endl;
+        for (const auto& availablePresentMode : details.presentModes) {
+            std::cout << "  " << getPresentModeName(availablePresentMode) << std::endl;
         }
 
         return details;
