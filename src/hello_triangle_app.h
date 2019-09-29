@@ -104,6 +104,7 @@ namespace vulkan_tutorial {
         VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) const;
         void cleanup();
         void cleanupSwapchain();
+        void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
         void createBuffer(
             VkDeviceSize size,
             VkBufferUsageFlags usage,
