@@ -2,6 +2,8 @@
 
 #include "scoped_glfw_window.h"
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
+#include <array>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -21,6 +23,14 @@ namespace vulkan_tutorial {
         VkSurfaceCapabilitiesKHR capabilities;
         std::vector<VkSurfaceFormatKHR> formats;
         std::vector<VkPresentModeKHR> presentModes;
+    };
+
+    struct vertex {
+        glm::vec2 pos;
+        glm::vec3 color;
+
+        static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions();
+        static VkVertexInputBindingDescription getBindingDescription();
     };
 
     class hello_triangle_app {
@@ -74,6 +84,10 @@ namespace vulkan_tutorial {
         uint32_t _currentFrame;
         bool _framebufferResized;
 
+        std::vector<vertex> _vertices;
+        VkBuffer _vertexBuffer;
+        VkDeviceMemory _vertexBufferMemory;
+
     private:
         static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
             VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -101,7 +115,9 @@ namespace vulkan_tutorial {
         VkShaderModule createShaderModule(const std::vector<char>& code);
         void createSurface();
         void createSwapchain();
+        void createVertexBuffer();
         void drawFrame();
+        uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
         queue_family_indices findQueueFamilies(VkPhysicalDevice device) const;
         std::vector<const char*> getRequiredExtensions() const;
         void initVulkan();

@@ -2,6 +2,7 @@
 #include "scoped_glfw_window.h"
 
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
 
 #include <algorithm>
 #include <cstdint>
@@ -96,6 +97,31 @@ namespace {
 }
 
 namespace vulkan_tutorial {
+    std::array<VkVertexInputAttributeDescription, 2> vertex::getAttributeDescriptions() {
+        std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions = {};
+
+        attributeDescriptions[0].binding = 0u;
+        attributeDescriptions[0].location = 0u;
+        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[0].offset = offsetof(vertex, pos);
+
+        attributeDescriptions[1].binding = 0u;
+        attributeDescriptions[1].location = 1u;
+        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[1].offset = offsetof(vertex, color);
+
+        return attributeDescriptions;
+    }
+
+    VkVertexInputBindingDescription vertex::getBindingDescription() {
+        VkVertexInputBindingDescription bindingDescription = {};
+        bindingDescription.binding = 0u;
+        bindingDescription.stride = sizeof(vertex);
+        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        return bindingDescription;
+    }
+
     hello_triangle_app::hello_triangle_app()
       : _commandBuffers {},
         _commandPool {VK_NULL_HANDLE},
@@ -125,6 +151,13 @@ namespace vulkan_tutorial {
         _swapchainImageViews {},
         _validationLayers {
             "VK_LAYER_KHRONOS_validation"
+        },
+        _vertexBuffer {VK_NULL_HANDLE},
+        _vertexBufferMemory {VK_NULL_HANDLE},
+        _vertices {
+            {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+            {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+            {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
         },
         _window {}
     {}
@@ -255,6 +288,8 @@ namespace vulkan_tutorial {
 
         cleanupSwapchain();
 
+        vkDestroyBuffer(_device, _vertexBuffer, nullptr);
+        vkFreeMemory(_device, _vertexBufferMemory, nullptr);
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
             vkDestroySemaphore(_device, _imageAvailableSemaphores[i], nullptr);
             vkDestroySemaphore(_device, _renderFinishedSemaphores[i], nullptr);
@@ -280,6 +315,8 @@ namespace vulkan_tutorial {
         _physicalDevice = VK_NULL_HANDLE;
         _renderFinishedSemaphores.clear();
         _surface = VK_NULL_HANDLE;
+        _vertexBuffer = VK_NULL_HANDLE;
+        _vertexBufferMemory = VK_NULL_HANDLE;
         _window = scoped_glfw_window();
     }
 
@@ -341,7 +378,10 @@ namespace vulkan_tutorial {
 
             vkCmdBeginRenderPass(_commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
             vkCmdBindPipeline(_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipeline);
-            vkCmdDraw(_commandBuffers[i], 3u, 1u, 0u, 0u);
+            VkBuffer vertexBuffers[] = {_vertexBuffer};
+            VkDeviceSize offsets[] = {0};
+            vkCmdBindVertexBuffers(_commandBuffers[i], 0u, 1u, vertexBuffers, offsets);
+            vkCmdDraw(_commandBuffers[i], static_cast<uint32_t>(_vertices.size()), 1u, 0u, 0u);
             vkCmdEndRenderPass(_commandBuffers[i]);
 
             VkResult endResult = vkEndCommandBuffer(_commandBuffers[i]);
@@ -408,12 +448,15 @@ namespace vulkan_tutorial {
 
         VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
+        auto attributeDescriptions = vertex::getAttributeDescriptions();
+        auto bindingDescription = vertex::getBindingDescription();
+
         VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vertexInputInfo.vertexBindingDescriptionCount = 0u;
-        vertexInputInfo.pVertexBindingDescriptions = nullptr;
-        vertexInputInfo.vertexAttributeDescriptionCount = 0u;
-        vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+        vertexInputInfo.vertexBindingDescriptionCount = 1u;
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
         VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -779,6 +822,40 @@ namespace vulkan_tutorial {
         _swapchainImageFormat = surfaceFormat.format;
     }
 
+    void hello_triangle_app::createVertexBuffer() {
+        VkBufferCreateInfo bufferInfo = {};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = sizeof(_vertices[0]) * _vertices.size();
+        bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VkResult result = vkCreateBuffer(_device, &bufferInfo, nullptr, &_vertexBuffer);
+        if (result != VK_SUCCESS)
+            throw std::runtime_error("failed to create vertex buffer");
+
+        VkMemoryRequirements memRequirements;
+        vkGetBufferMemoryRequirements(_device, _vertexBuffer, &memRequirements);
+
+        VkMemoryAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memRequirements.size;
+        allocInfo.memoryTypeIndex = findMemoryType(
+            memRequirements.memoryTypeBits,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        );
+
+        result = vkAllocateMemory(_device, &allocInfo, nullptr, &_vertexBufferMemory);
+        if (result != VK_SUCCESS)
+            throw std::runtime_error("failed to allocate vertex buffer memory");
+
+        vkBindBufferMemory(_device, _vertexBuffer, _vertexBufferMemory, 0);
+
+        void* data;
+        vkMapMemory(_device, _vertexBufferMemory, 0, bufferInfo.size, 0, &data);
+        memcpy(data, _vertices.data(), static_cast<size_t>(bufferInfo.size));
+        vkUnmapMemory(_device, _vertexBufferMemory);
+    }
+
     VKAPI_ATTR VkBool32 VKAPI_CALL hello_triangle_app::debugCallback(
         VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
         VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -853,6 +930,21 @@ namespace vulkan_tutorial {
         _currentFrame = (_currentFrame + 1u) % MAX_FRAMES_IN_FLIGHT;
     }
 
+    uint32_t hello_triangle_app::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+        VkPhysicalDeviceMemoryProperties memProperties;
+        vkGetPhysicalDeviceMemoryProperties(_physicalDevice, &memProperties);
+
+        for (uint32_t i = 0u; i < memProperties.memoryTypeCount; ++i) {
+            bool matchesFilter = (typeFilter & (1 << i)) != 0u;
+            bool hasProperties = (memProperties.memoryTypes[i].propertyFlags & properties) == properties;
+            if (matchesFilter && hasProperties) {
+                return i;
+            }
+        }
+
+        throw std::runtime_error("failed to find a suitable memory type");
+    }
+
     queue_family_indices hello_triangle_app::findQueueFamilies(VkPhysicalDevice device) const {
         queue_family_indices indices;
 
@@ -911,6 +1003,7 @@ namespace vulkan_tutorial {
         createGraphicsPipeline();
         createFramebuffers();
         createCommandPool();
+        createVertexBuffer();
         createCommandBuffers();
         createSyncObjects();
     }
