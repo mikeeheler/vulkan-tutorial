@@ -97,6 +97,9 @@ namespace vulkan_tutorial {
         VkBuffer _indexBuffer;
         VkDeviceMemory _indexBufferMemory;
 
+        VkImage _textureImage;
+        VkDeviceMemory _textureImageMemory;
+
         std::vector<vertex> _vertices;
         VkBuffer _vertexBuffer;
         VkDeviceMemory _vertexBufferMemory;
@@ -113,6 +116,7 @@ namespace vulkan_tutorial {
         );
         static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
 
+        VkCommandBuffer beginSingleTimeCommands();
         bool checkDeviceExtensionsSupport(VkPhysicalDevice device) const;
         bool checkValidationLayerSupport() const;
         VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) const;
@@ -121,6 +125,7 @@ namespace vulkan_tutorial {
         void cleanup();
         void cleanupSwapchain();
         void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+        void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
         void createBuffer(
             VkDeviceSize size,
             VkBufferUsageFlags usage,
@@ -135,6 +140,15 @@ namespace vulkan_tutorial {
         void createDescriptorSets();
         void createFramebuffers();
         void createGraphicsPipeline();
+        void createImage(
+            uint32_t width,
+            uint32_t height,
+            VkFormat format,
+            VkImageTiling tiling,
+            VkImageUsageFlags usage,
+            VkMemoryPropertyFlags properties,
+            VkImage& image,
+            VkDeviceMemory& imageMemory);
         void createImageViews();
         void createIndexBuffer();
         void createInstance();
@@ -144,9 +158,11 @@ namespace vulkan_tutorial {
         VkShaderModule createShaderModule(const std::vector<char>& code);
         void createSurface();
         void createSwapchain();
+        void createTextureImage();
         void createUniformBuffers();
         void createVertexBuffer();
         void drawFrame();
+        void endSingleTimeCommands(VkCommandBuffer commandBuffer);
         uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
         queue_family_indices findQueueFamilies(VkPhysicalDevice device) const;
         std::vector<const char*> getRequiredExtensions() const;
@@ -159,6 +175,7 @@ namespace vulkan_tutorial {
         int rateDeviceSuitability(VkPhysicalDevice device) const;
         void recreateSwapchain();
         void setupDebugMessenger();
+        void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
         void updateUniformBuffer(uint32_t imageIndex);
    };
 }
