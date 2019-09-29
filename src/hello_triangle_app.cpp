@@ -160,6 +160,7 @@ namespace vulkan_tutorial {
         _swapchainImageViews {},
         _textureImage {VK_NULL_HANDLE},
         _textureImageMemory {VK_NULL_HANDLE},
+        _textureImageView {VK_NULL_HANDLE},
         _uniformBuffers {},
         _uniformBuffersMemory {},
         _validationLayers {
@@ -321,6 +322,7 @@ namespace vulkan_tutorial {
 
         cleanupSwapchain();
 
+        vkDestroyImageView(_device, _textureImageView, nullptr);
         vkDestroyImage(_device, _textureImage, nullptr);
         vkFreeMemory(_device, _textureImageMemory, nullptr);
         vkDestroyDescriptorSetLayout(_device, _descriptorSetLayout, nullptr);
@@ -358,6 +360,7 @@ namespace vulkan_tutorial {
         _surface = VK_NULL_HANDLE;
         _textureImage = VK_NULL_HANDLE;
         _textureImageMemory = VK_NULL_HANDLE;
+        _textureImageView = VK_NULL_HANDLE;
         _vertexBuffer = VK_NULL_HANDLE;
         _vertexBufferMemory = VK_NULL_HANDLE;
         _window = scoped_glfw_window();
@@ -796,29 +799,36 @@ namespace vulkan_tutorial {
         vkBindImageMemory(_device, image, imageMemory, 0);
     }
 
+    VkImageView hello_triangle_app::createImageView(VkImage image, VkFormat format) {
+        VkImageViewCreateInfo viewInfo = {};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = image;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = format;
+        viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel = 0u;
+        viewInfo.subresourceRange.levelCount = 1u;
+        viewInfo.subresourceRange.baseArrayLayer = 0u;
+        viewInfo.subresourceRange.layerCount = 1u;
+
+        VkImageView imageView;
+        VkResult result = vkCreateImageView(_device, &viewInfo, nullptr, &imageView);
+        if (result != VK_SUCCESS)
+            throw std::runtime_error("failed to create texture image view");
+
+        return imageView;
+    }
+
     void hello_triangle_app::createImageViews() {
         _swapchainImageViews.resize(_swapchainImages.size());
 
         for (size_t i = 0; i < _swapchainImages.size(); ++i) {
             std::cout << "create view for swapchain image #" << i << std::endl;
-            VkImageViewCreateInfo createInfo = {};
-            createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            createInfo.image = _swapchainImages[i];
-            createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            createInfo.format = _swapchainImageFormat;
-            createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-            createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-            createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-            createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-            createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            createInfo.subresourceRange.baseMipLevel = 0u;
-            createInfo.subresourceRange.levelCount = 1u;
-            createInfo.subresourceRange.baseArrayLayer = 0u;
-            createInfo.subresourceRange.layerCount = 1u;
-
-            VkResult result = vkCreateImageView(_device, &createInfo, nullptr, &_swapchainImageViews[i]);
-            if (result != VK_SUCCESS)
-                throw std::runtime_error("failed to create swapchain image view");
+            _swapchainImageViews[i] = createImageView(_swapchainImages[i], _swapchainImageFormat);
         }
     }
 
@@ -1153,6 +1163,10 @@ namespace vulkan_tutorial {
         vkFreeMemory(_device, stagingBufferMemory, nullptr);
     }
 
+    void hello_triangle_app::createTextureImageView() {
+        _textureImageView = createImageView(_textureImage, VK_FORMAT_R8G8B8A8_UNORM);
+    }
+
     void hello_triangle_app::createVertexBuffer() {
         VkDeviceSize bufferSize = sizeof(_vertices[0]) * _vertices.size();
 
@@ -1353,6 +1367,7 @@ namespace vulkan_tutorial {
         createFramebuffers();
         createCommandPool();
         createTextureImage();
+        createTextureImageView();
         createVertexBuffer();
         createIndexBuffer();
         createUniformBuffers();
