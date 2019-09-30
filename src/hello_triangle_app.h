@@ -58,6 +58,9 @@ namespace vulkan_tutorial {
         static const int INITIAL_WIDTH = 800;
         static const int MAX_FRAMES_IN_FLIGHT = 3;
 
+        const std::string MODEL_PATH = "models/chalet.obj";
+        const std::string TEXTURE_PATH = "textures/chalet.jpg";
+
         scoped_glfw_window _window;
 
         VkInstance _instance;
@@ -98,7 +101,7 @@ namespace vulkan_tutorial {
         VkDeviceMemory _depthImageMemory;
         VkImageView _depthImageView;
 
-        std::vector<uint16_t> _indices;
+        std::vector<uint32_t> _indices;
         VkBuffer _indexBuffer;
         VkDeviceMemory _indexBufferMemory;
 

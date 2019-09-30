@@ -27,5 +27,3 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/models/chalet.obj
     DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/models)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/textures/chalet.jpg
     DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/textures)
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/textures/texture.jpg
-    DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/textures)

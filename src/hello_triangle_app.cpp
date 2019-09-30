@@ -5,6 +5,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <stb/stb_image.h>
+#include <tiny_obj_loader.h>
 
 #include <algorithm>
 #include <array>
@@ -528,7 +529,7 @@ namespace vulkan_tutorial {
             VkBuffer vertexBuffers[] = {_vertexBuffer};
             VkDeviceSize offsets[] = {0};
             vkCmdBindVertexBuffers(commandBuffer, 0u, 1u, vertexBuffers, offsets);
-            vkCmdBindIndexBuffer(commandBuffer, _indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+            vkCmdBindIndexBuffer(commandBuffer, _indexBuffer, 0, VK_INDEX_TYPE_UINT32);
             vkCmdBindDescriptorSets(
                 commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineLayout,
                 0u, 1u, &_descriptorSets[i],
@@ -1233,7 +1234,7 @@ namespace vulkan_tutorial {
 
     void hello_triangle_app::createTextureImage() {
         int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load("textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         if (pixels == nullptr)
             throw std::runtime_error("failed to load texture image");
 
