@@ -7,7 +7,8 @@ set(VK_LAYER_PATH "${VULKAN_SDK_DIR}/etc/vulkan/explicit_layer.d")
 set(vulkan_tutorial_SOURCES
     src/hello_triangle_app
     src/main.cpp
-    src/scoped_glfw_window.cpp)
+    src/scoped_glfw_window.cpp
+    src/tiny_obj_loader.cc)
 
 find_package(glfw3 3.2)
 
@@ -22,5 +23,9 @@ link_directories("${VULKAN_SDK_DIR}/lib")
 add_executable (vulkan-tutorial ${vulkan_tutorial_SOURCES})
 target_link_libraries (vulkan-tutorial glfw vulkan)
 
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/models/chalet.obj
+    DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/models)
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/textures/chalet.jpg
+    DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/textures)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/textures/texture.jpg
     DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/textures)
