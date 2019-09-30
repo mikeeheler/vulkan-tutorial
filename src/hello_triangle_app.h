@@ -38,6 +38,10 @@ namespace vulkan_tutorial {
 
         static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions();
         static VkVertexInputBindingDescription getBindingDescription();
+
+        bool operator==(const vertex& other) const {
+            return pos == other.pos && texCoord == other.texCoord && color == other.color;
+        }
     };
 
     class hello_triangle_app {
@@ -188,6 +192,7 @@ namespace vulkan_tutorial {
         bool hasStencilComponent(VkFormat format) const;
         void initVulkan();
         void initWindow();
+        void loadModel();
         void mainLoop();
         void pickPhysicalDevice();
         void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) const;

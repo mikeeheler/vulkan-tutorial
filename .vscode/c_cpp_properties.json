@@ -7,6 +7,7 @@
             "name": "Linux",
             "defines": [
                 "GLFW_INCLUDE_VULKAN",
+                "GLM_ENABLE_EXPERIMENTAL",
                 "GLM_FORCE_DEPTH_ZERO_TO_ONE",
                 "GLM_FORCE_RADIANS",
                 "STB_IMAGE_IMPLEMENTATION"

@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/hash.hpp>
 #include <stb/stb_image.h>
 #include <tiny_obj_loader.h>
 
@@ -18,7 +19,18 @@
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_map>
 #include <vector>
+
+namespace std {
+    template<> struct hash<vulkan_tutorial::vertex> {
+        size_t operator()(vulkan_tutorial::vertex const& vertex) const {
+            return ((hash<glm::vec3>()(vertex.pos) ^
+                (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
+                (hash<glm::vec2>()(vertex.texCoord) << 1);
+        }
+    };
+}
 
 namespace {
     VkApplicationInfo create_vk_application_info() {
@@ -153,10 +165,7 @@ namespace vulkan_tutorial {
         _imageAvailableSemaphores {},
         _indexBuffer {VK_NULL_HANDLE},
         _indexBufferMemory {VK_NULL_HANDLE},
-        _indices {
-            0, 1, 2, 2, 3, 0,
-            4, 5, 6, 6, 7, 4
-        },
+        _indices {},
         _inFlightFences {},
         _instance {VK_NULL_HANDLE},
         _physicalDevice {VK_NULL_HANDLE},
@@ -182,17 +191,7 @@ namespace vulkan_tutorial {
         },
         _vertexBuffer {VK_NULL_HANDLE},
         _vertexBufferMemory {VK_NULL_HANDLE},
-        _vertices {
-            {{-0.5f, -0.5f,  0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-            {{ 0.5f, -0.5f,  0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-            {{ 0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-            {{-0.5f,  0.5f,  0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-
-            {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-            {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-            {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-            {{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
-        },
+        _vertices {},
         _window {}
     {}
 
@@ -1238,7 +1237,7 @@ namespace vulkan_tutorial {
         if (pixels == nullptr)
             throw std::runtime_error("failed to load texture image");
 
-        std::cout << "read textures/textures.jpg: " << texWidth << 'x' << texHeight << 'x' << texChannels << std::endl;
+        std::cout << "read " << TEXTURE_PATH << ": " << texWidth << 'x' << texHeight << 'x' << texChannels << std::endl;
 
         VkDeviceSize imageSize = texWidth * texHeight * 4;
 
@@ -1562,6 +1561,7 @@ namespace vulkan_tutorial {
         createTextureImage();
         createTextureImageView();
         createTextureSampler();
+        loadModel();
         createVertexBuffer();
         createIndexBuffer();
         createUniformBuffers();
@@ -1582,6 +1582,46 @@ namespace vulkan_tutorial {
         _window.init(INITIAL_WIDTH, INITIAL_HEIGHT, "Vulkan Test");
         glfwSetWindowUserPointer(_window.get(), this);
         glfwSetFramebufferSizeCallback(_window.get(), framebufferResizeCallback);
+    }
+
+    void hello_triangle_app::loadModel() {
+        tinyobj::attrib_t attrib;
+        std::vector<tinyobj::shape_t> shapes;
+        std::vector<tinyobj::material_t> materials;
+        std::string warn, err;
+
+        bool result = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str());
+        if (!result)
+            throw std::runtime_error(warn + err);
+        std::cout << "read " << MODEL_PATH << std::endl;
+
+        std::unordered_map<vertex, uint32_t> uniqueVertices = {};
+
+        for (const auto& shape : shapes) {
+            for (const auto& index : shape.mesh.indices) {
+                vertex vertex = {};
+
+                vertex.pos = {
+                    attrib.vertices[3 * index.vertex_index + 0],
+                    attrib.vertices[3 * index.vertex_index + 1],
+                    attrib.vertices[3 * index.vertex_index + 2]
+                };
+
+                vertex.texCoord = {
+                    attrib.texcoords[2 * index.texcoord_index + 0],
+                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
+                };
+
+                vertex.color = { 1.0f, 1.0f, 1.0f };
+
+                if (uniqueVertices.count(vertex) == 0) {
+                    uniqueVertices[vertex] = static_cast<uint32_t>(_vertices.size());
+                    _vertices.push_back(vertex);
+                }
+
+                _indices.push_back(uniqueVertices[vertex]);
+            }
+        }
     }
 
     void hello_triangle_app::mainLoop() {
@@ -1826,7 +1866,7 @@ namespace vulkan_tutorial {
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
         uniform_buffer_object ubo = {};
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(30.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.view = glm::lookAt(
             glm::vec3(2.0f, 2.0f, 2.0f),
             glm::vec3(0.0f, 0.0f, 0.0f),

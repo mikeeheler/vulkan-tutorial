@@ -13,6 +13,7 @@ set(vulkan_tutorial_SOURCES
 find_package(glfw3 3.2)
 
 add_definitions(-DGLFW_INCLUDE_VULKAN
+                -DGLM_ENABLE_EXPERIMENTAL
                 -DGLM_FORCE_DEPTH_ZERO_TO_ONE
                 -DGLM_FORCE_RADIANS
                 -DSTB_IMAGE_IMPLEMENTATION)
