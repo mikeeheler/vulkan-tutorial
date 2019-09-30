@@ -106,7 +106,7 @@ namespace vulkan_tutorial {
 
         attributeDescriptions[0].binding = 0u;
         attributeDescriptions[0].location = 0u;
-        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
         attributeDescriptions[0].offset = offsetof(vertex, pos);
 
         attributeDescriptions[1].binding = 0u;
@@ -136,6 +136,9 @@ namespace vulkan_tutorial {
         _commandPool {VK_NULL_HANDLE},
         _currentFrame(0u),
         _debugMessenger {nullptr},
+        _depthImage {VK_NULL_HANDLE},
+        _depthImageMemory {VK_NULL_HANDLE},
+        _depthImageView {VK_NULL_HANDLE},
         _descriptorPool {VK_NULL_HANDLE},
         _descriptorSetLayout {VK_NULL_HANDLE},
         _descriptorSets {},
@@ -149,7 +152,10 @@ namespace vulkan_tutorial {
         _imageAvailableSemaphores {},
         _indexBuffer {VK_NULL_HANDLE},
         _indexBufferMemory {VK_NULL_HANDLE},
-        _indices {0, 1, 2, 2, 3, 0},
+        _indices {
+            0, 1, 2, 2, 3, 0,
+            4, 5, 6, 6, 7, 4
+        },
         _inFlightFences {},
         _instance {VK_NULL_HANDLE},
         _physicalDevice {VK_NULL_HANDLE},
@@ -176,10 +182,15 @@ namespace vulkan_tutorial {
         _vertexBuffer {VK_NULL_HANDLE},
         _vertexBufferMemory {VK_NULL_HANDLE},
         _vertices {
-            {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-            {{ 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-            {{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-            {{-0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+            {{-0.5f, -0.5f,  0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+            {{ 0.5f, -0.5f,  0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+            {{ 0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+            {{-0.5f,  0.5f,  0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+
+            {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+            {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+            {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+            {{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
         },
         _window {}
     {}
@@ -376,6 +387,9 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::cleanupSwapchain() {
+        vkDestroyImageView(_device, _depthImageView, nullptr);
+        vkDestroyImage(_device, _depthImage, nullptr);
+        vkFreeMemory(_device, _depthImageMemory, nullptr);
         for (auto framebuffer : _swapchainFramebuffers) {
             vkDestroyFramebuffer(_device, framebuffer, nullptr);
         }
@@ -496,15 +510,18 @@ namespace vulkan_tutorial {
             if (beginResult != VK_SUCCESS)
                 throw std::runtime_error("failed to begin recording command buffer");
 
-            VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+            std::array<VkClearValue, 2> clearValues = {};
+            clearValues[0].color = {0.0f, 0.0f, 0.0f, 1.0f};
+            clearValues[1].depthStencil = {1.0f, 0u};
+
             VkRenderPassBeginInfo renderPassInfo = {};
             renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
             renderPassInfo.renderPass = _renderPass;
             renderPassInfo.framebuffer = _swapchainFramebuffers[i];
             renderPassInfo.renderArea.offset = { 0, 0 };
             renderPassInfo.renderArea.extent = _swapchainExtent;
-            renderPassInfo.clearValueCount = 1u;
-            renderPassInfo.pClearValues = &clearColor;
+            renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+            renderPassInfo.pClearValues = clearValues.data();
 
             vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipeline);
@@ -536,6 +553,31 @@ namespace vulkan_tutorial {
         VkResult result = vkCreateCommandPool(_device, &poolInfo, nullptr, &_commandPool);
         if (result != VK_SUCCESS)
             throw std::runtime_error("failed to create command pool");
+    }
+
+    void hello_triangle_app::createDepthResources() {
+        VkFormat depthFormat = findDepthFormat();
+        if (depthFormat == VK_FORMAT_UNDEFINED)
+            throw std::runtime_error("unable to find a compatible depth/stencil format");
+
+        createImage(
+            _swapchainExtent.width,
+            _swapchainExtent.height,
+            depthFormat,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            _depthImage,
+            _depthImageMemory
+        );
+        _depthImageView = createImageView(_depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+        transitionImageLayout(
+            _depthImage,
+            depthFormat,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+        );
     }
 
     void hello_triangle_app::createDescriptorPool() {
@@ -640,15 +682,16 @@ namespace vulkan_tutorial {
         _swapchainFramebuffers.resize(_swapchainImageViews.size());
 
         for (size_t i = 0; i < _swapchainImageViews.size(); ++i) {
-            VkImageView attachments[] = {
-                _swapchainImageViews[i]
+            std::array<VkImageView, 2> attachments = {
+                _swapchainImageViews[i],
+                _depthImageView
             };
 
             VkFramebufferCreateInfo framebufferInfo = {};
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
             framebufferInfo.renderPass = _renderPass;
-            framebufferInfo.attachmentCount = 1u;
-            framebufferInfo.pAttachments = attachments;
+            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+            framebufferInfo.pAttachments = attachments.data();
             framebufferInfo.width = _swapchainExtent.width;
             framebufferInfo.height = _swapchainExtent.height;
             framebufferInfo.layers = 1u;
@@ -761,6 +804,18 @@ namespace vulkan_tutorial {
         colorBlending.blendConstants[2] = 0.0f;
         colorBlending.blendConstants[3] = 0.0f;
 
+        VkPipelineDepthStencilStateCreateInfo depthStencil = {};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable = VK_TRUE;
+        depthStencil.depthWriteEnable = VK_TRUE;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+        depthStencil.depthBoundsTestEnable = VK_FALSE;
+        depthStencil.minDepthBounds = 0.0f;
+        depthStencil.maxDepthBounds = 1.0f;
+        depthStencil.stencilTestEnable = VK_FALSE;
+        depthStencil.front = {};
+        depthStencil.back = {};
+
         VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1u;
@@ -781,7 +836,7 @@ namespace vulkan_tutorial {
         pipelineInfo.pViewportState = &viewportState;
         pipelineInfo.pRasterizationState = &rasterizer;
         pipelineInfo.pMultisampleState = &multisampling;
-        pipelineInfo.pDepthStencilState = nullptr;
+        pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = nullptr;
         pipelineInfo.layout = _pipelineLayout;
@@ -811,10 +866,10 @@ namespace vulkan_tutorial {
         imageInfo.extent.depth = 1u;
         imageInfo.mipLevels = 1u;
         imageInfo.arrayLayers = 1u;
-        imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.format = format;
+        imageInfo.tiling = tiling;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageInfo.usage = usage;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.flags = 0;
@@ -829,7 +884,7 @@ namespace vulkan_tutorial {
         VkMemoryAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
 
         result = vkAllocateMemory(_device, &allocInfo, nullptr, &imageMemory);
         if (result != VK_SUCCESS)
@@ -838,7 +893,7 @@ namespace vulkan_tutorial {
         vkBindImageMemory(_device, image, imageMemory, 0);
     }
 
-    VkImageView hello_triangle_app::createImageView(VkImage image, VkFormat format) {
+    VkImageView hello_triangle_app::createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags) {
         VkImageViewCreateInfo viewInfo = {};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = image;
@@ -848,7 +903,7 @@ namespace vulkan_tutorial {
         viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
         viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
         viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.aspectMask = aspectFlags;
         viewInfo.subresourceRange.baseMipLevel = 0u;
         viewInfo.subresourceRange.levelCount = 1u;
         viewInfo.subresourceRange.baseArrayLayer = 0u;
@@ -867,7 +922,11 @@ namespace vulkan_tutorial {
 
         for (size_t i = 0; i < _swapchainImages.size(); ++i) {
             std::cout << "create view for swapchain image #" << i << std::endl;
-            _swapchainImageViews[i] = createImageView(_swapchainImages[i], _swapchainImageFormat);
+            _swapchainImageViews[i] = createImageView(
+                _swapchainImages[i],
+                _swapchainImageFormat,
+                VK_IMAGE_ASPECT_COLOR_BIT
+            );
         }
     }
 
@@ -985,6 +1044,10 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::createRenderPass() {
+        auto depthFormat = findDepthFormat();
+        if (depthFormat == VK_FORMAT_UNDEFINED)
+            throw std::runtime_error("unable to find compatible depth/stencil format");
+
         VkAttachmentDescription colorAttachment = {};
         colorAttachment.format = _swapchainImageFormat;
         colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -999,10 +1062,25 @@ namespace vulkan_tutorial {
         colorAttachmentRef.attachment = 0u;
         colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+        VkAttachmentDescription depthAttachment = {};
+        depthAttachment.format = depthFormat;
+        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentReference depthAttachmentRef = {};
+        depthAttachmentRef.attachment = 1u;
+        depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
         VkSubpassDescription subpass = {};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = 1u;
         subpass.pColorAttachments = &colorAttachmentRef;
+        subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
         VkSubpassDependency dependency = {};
         dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -1013,10 +1091,11 @@ namespace vulkan_tutorial {
         dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
             | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
+        std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
         VkRenderPassCreateInfo renderPassInfo = {};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassInfo.attachmentCount = 1u;
-        renderPassInfo.pAttachments = &colorAttachment;
+        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        renderPassInfo.pAttachments = attachments.data();
         renderPassInfo.subpassCount = 1u;
         renderPassInfo.pSubpasses = &subpass;
         renderPassInfo.dependencyCount = 1u;
@@ -1204,7 +1283,7 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::createTextureImageView() {
-        _textureImageView = createImageView(_textureImage, VK_FORMAT_R8G8B8A8_UNORM);
+        _textureImageView = createImageView(_textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
     void hello_triangle_app::createTextureSampler() {
@@ -1356,7 +1435,21 @@ namespace vulkan_tutorial {
         vkFreeCommandBuffers(_device, _commandPool, 1u, &commandBuffer);
     }
 
-    uint32_t hello_triangle_app::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+    VkFormat hello_triangle_app::findDepthFormat() const {
+        return findSupportedFormat(
+            {
+                VK_FORMAT_D24_UNORM_S8_UINT,
+                VK_FORMAT_X8_D24_UNORM_PACK32,
+                VK_FORMAT_D32_SFLOAT,
+                VK_FORMAT_D32_SFLOAT_S8_UINT,
+                VK_FORMAT_D16_UNORM_S8_UINT
+            },
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+        );
+    }
+
+    uint32_t hello_triangle_app::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const {
         VkPhysicalDeviceMemoryProperties memProperties;
         vkGetPhysicalDeviceMemoryProperties(_physicalDevice, &memProperties);
 
@@ -1369,6 +1462,32 @@ namespace vulkan_tutorial {
         }
 
         throw std::runtime_error("failed to find a suitable memory type");
+    }
+
+    VkFormat hello_triangle_app::findSupportedFormat(
+        const std::vector<VkFormat>& candidates,
+        VkImageTiling tiling,
+        VkFormatFeatureFlags features
+    ) const {
+        for (VkFormat format : candidates) {
+            VkFormatProperties props;
+            vkGetPhysicalDeviceFormatProperties(_physicalDevice, format, &props);
+
+            if (
+                tiling == VK_IMAGE_TILING_LINEAR
+                && (props.linearTilingFeatures & features) == features
+            ) {
+                return format;
+            }
+            else if (
+                tiling == VK_IMAGE_TILING_OPTIMAL
+                && (props.optimalTilingFeatures & features) == features
+            ) {
+                return format;
+            }
+        }
+
+        return VK_FORMAT_UNDEFINED;
     }
 
     queue_family_indices hello_triangle_app::findQueueFamilies(VkPhysicalDevice device) const {
@@ -1417,6 +1536,14 @@ namespace vulkan_tutorial {
         return extensions;
     }
 
+    bool hello_triangle_app::hasStencilComponent(VkFormat format) const {
+        // Ordered by probability
+        return format == VK_FORMAT_D24_UNORM_S8_UINT
+            || format == VK_FORMAT_D32_SFLOAT_S8_UINT
+            || format == VK_FORMAT_D16_UNORM_S8_UINT
+            || format == VK_FORMAT_S8_UINT;
+    }
+
     void hello_triangle_app::initVulkan() {
         createInstance();
         setupDebugMessenger();
@@ -1428,8 +1555,9 @@ namespace vulkan_tutorial {
         createRenderPass();
         createDescriptorSetLayout();
         createGraphicsPipeline();
-        createFramebuffers();
         createCommandPool();
+        createDepthResources();
+        createFramebuffers();
         createTextureImage();
         createTextureImageView();
         createTextureSampler();
@@ -1590,6 +1718,7 @@ namespace vulkan_tutorial {
         createImageViews();
         createRenderPass();
         createGraphicsPipeline();
+        createDepthResources();
         createFramebuffers();
         createUniformBuffers();
         createDescriptorPool();
@@ -1625,13 +1754,22 @@ namespace vulkan_tutorial {
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = image;
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         barrier.subresourceRange.baseMipLevel = 0u;
         barrier.subresourceRange.levelCount = 1u;
         barrier.subresourceRange.baseArrayLayer = 0u;
         barrier.subresourceRange.layerCount = 1u;
         barrier.srcAccessMask = 0;
         barrier.dstAccessMask = 0;
+
+        if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            if (hasStencilComponent(format)) {
+                barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+            }
+        }
+        else {
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        }
 
         VkPipelineStageFlags sourceStage;
         VkPipelineStageFlags destinationStage;
@@ -1646,13 +1784,23 @@ namespace vulkan_tutorial {
             destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         }
         else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-                 && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+            && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         ) {
             barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
             sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED
+            && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+        ) {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+                | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         }
         else {
             throw std::invalid_argument("unsupported layout transition");

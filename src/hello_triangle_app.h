@@ -32,7 +32,7 @@ namespace vulkan_tutorial {
     };
 
     struct vertex {
-        glm::vec2 pos;
+        glm::vec3 pos;
         glm::vec3 color;
         glm::vec2 texCoord;
 
@@ -94,6 +94,10 @@ namespace vulkan_tutorial {
         uint32_t _currentFrame;
         bool _framebufferResized;
 
+        VkImage _depthImage;
+        VkDeviceMemory _depthImageMemory;
+        VkImageView _depthImageView;
+
         std::vector<uint16_t> _indices;
         VkBuffer _indexBuffer;
         VkDeviceMemory _indexBufferMemory;
@@ -138,6 +142,7 @@ namespace vulkan_tutorial {
         );
         void createCommandBuffers();
         void createCommandPool();
+        void createDepthResources();
         void createDescriptorPool();
         void createDescriptorSetLayout();
         void createDescriptorSets();
@@ -152,7 +157,7 @@ namespace vulkan_tutorial {
             VkMemoryPropertyFlags properties,
             VkImage& image,
             VkDeviceMemory& imageMemory);
-        VkImageView createImageView(VkImage image, VkFormat format);
+        VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
         void createImageViews();
         void createIndexBuffer();
         void createInstance();
@@ -169,9 +174,15 @@ namespace vulkan_tutorial {
         void createVertexBuffer();
         void drawFrame();
         void endSingleTimeCommands(VkCommandBuffer commandBuffer);
-        uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+        VkFormat findDepthFormat() const;
+        uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
+        VkFormat findSupportedFormat(
+            const std::vector<VkFormat>& candidates,
+            VkImageTiling tiling,
+            VkFormatFeatureFlags features) const;
         queue_family_indices findQueueFamilies(VkPhysicalDevice device) const;
         std::vector<const char*> getRequiredExtensions() const;
+        bool hasStencilComponent(VkFormat format) const;
         void initVulkan();
         void initWindow();
         void mainLoop();
