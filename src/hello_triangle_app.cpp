@@ -168,6 +168,7 @@ namespace vulkan_tutorial {
         _indices {},
         _inFlightFences {},
         _instance {VK_NULL_HANDLE},
+        _mipLevels {1u},
         _physicalDevice {VK_NULL_HANDLE},
         _pipelineLayout {VK_NULL_HANDLE},
         _presentQueue {VK_NULL_HANDLE},
@@ -374,6 +375,7 @@ namespace vulkan_tutorial {
         _inFlightFences.clear();
         _instance = VK_NULL_HANDLE;
         _graphicsQueue = VK_NULL_HANDLE;
+        _mipLevels = 1u;
         _physicalDevice = VK_NULL_HANDLE;
         _renderFinishedSemaphores.clear();
         _surface = VK_NULL_HANDLE;
@@ -563,6 +565,7 @@ namespace vulkan_tutorial {
         createImage(
             _swapchainExtent.width,
             _swapchainExtent.height,
+            1u,
             depthFormat,
             VK_IMAGE_TILING_OPTIMAL,
             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
@@ -570,13 +573,14 @@ namespace vulkan_tutorial {
             _depthImage,
             _depthImageMemory
         );
-        _depthImageView = createImageView(_depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+        _depthImageView = createImageView(_depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1u);
 
         transitionImageLayout(
             _depthImage,
             depthFormat,
             VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            1u
         );
     }
 
@@ -854,7 +858,7 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::createImage(
-        uint32_t width, uint32_t height, VkFormat format,
+        uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties,
         VkImage& image, VkDeviceMemory& imageMemory
     ) {
@@ -864,7 +868,7 @@ namespace vulkan_tutorial {
         imageInfo.extent.width = width;
         imageInfo.extent.height = height;
         imageInfo.extent.depth = 1u;
-        imageInfo.mipLevels = 1u;
+        imageInfo.mipLevels = mipLevels;
         imageInfo.arrayLayers = 1u;
         imageInfo.format = format;
         imageInfo.tiling = tiling;
@@ -893,7 +897,12 @@ namespace vulkan_tutorial {
         vkBindImageMemory(_device, image, imageMemory, 0);
     }
 
-    VkImageView hello_triangle_app::createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags) {
+    VkImageView hello_triangle_app::createImageView(
+        VkImage image,
+        VkFormat format,
+        VkImageAspectFlags aspectFlags,
+        uint32_t mipLevels
+    ) {
         VkImageViewCreateInfo viewInfo = {};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = image;
@@ -905,7 +914,7 @@ namespace vulkan_tutorial {
         viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
         viewInfo.subresourceRange.aspectMask = aspectFlags;
         viewInfo.subresourceRange.baseMipLevel = 0u;
-        viewInfo.subresourceRange.levelCount = 1u;
+        viewInfo.subresourceRange.levelCount = mipLevels;
         viewInfo.subresourceRange.baseArrayLayer = 0u;
         viewInfo.subresourceRange.layerCount = 1u;
 
@@ -925,7 +934,8 @@ namespace vulkan_tutorial {
             _swapchainImageViews[i] = createImageView(
                 _swapchainImages[i],
                 _swapchainImageFormat,
-                VK_IMAGE_ASPECT_COLOR_BIT
+                VK_IMAGE_ASPECT_COLOR_BIT,
+                1u
             );
         }
     }
@@ -1237,9 +1247,13 @@ namespace vulkan_tutorial {
         if (pixels == nullptr)
             throw std::runtime_error("failed to load texture image");
 
-        std::cout << "read " << TEXTURE_PATH << ": " << texWidth << 'x' << texHeight << 'x' << texChannels << std::endl;
-
         VkDeviceSize imageSize = texWidth * texHeight * 4;
+        _mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1u;
+
+        std::cout << "read " << TEXTURE_PATH << ": "
+            << texWidth << 'x' << texHeight << 'x' << texChannels
+            << " (" << _mipLevels << " mips)"
+            << std::endl;
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
@@ -1258,9 +1272,10 @@ namespace vulkan_tutorial {
         stbi_image_free(pixels);
 
         createImage(
-            texWidth, texHeight, VK_FORMAT_R8G8B8A8_UNORM,
+            texWidth, texHeight, _mipLevels,
+            VK_FORMAT_R8G8B8A8_UNORM,
             VK_IMAGE_TILING_OPTIMAL,
-            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             _textureImage, _textureImageMemory
         );
@@ -1268,22 +1283,24 @@ namespace vulkan_tutorial {
             _textureImage,
             VK_FORMAT_R8G8B8A8_UNORM,
             VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            _mipLevels
         );
         copyBufferToImage(stagingBuffer, _textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-        transitionImageLayout(
-            _textureImage,
-            VK_FORMAT_R8G8B8A8_UNORM,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-        );
+        // transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
+
+        generateMipmaps(_textureImage, texWidth, texHeight, _mipLevels);
 
         vkDestroyBuffer(_device, stagingBuffer, nullptr);
         vkFreeMemory(_device, stagingBufferMemory, nullptr);
     }
 
     void hello_triangle_app::createTextureImageView() {
-        _textureImageView = createImageView(_textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
+        _textureImageView = createImageView(
+            _textureImage,
+            VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            _mipLevels);
     }
 
     void hello_triangle_app::createTextureSampler() {
@@ -1520,6 +1537,93 @@ namespace vulkan_tutorial {
         }
 
         return indices;
+    }
+
+    void hello_triangle_app::generateMipmaps(VkImage image, int32_t texWidth, int32_t texHeight, uint32_t mipLevels) {
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+        VkImageMemoryBarrier barrier = {};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.image = image;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseArrayLayer = 0u;
+        barrier.subresourceRange.layerCount = 1u;
+        barrier.subresourceRange.levelCount = 1u;
+
+        int32_t mipWidth = texWidth;
+        int32_t mipHeight = texHeight;
+
+        for (uint32_t i = 1u; i < mipLevels; ++i) {
+            barrier.subresourceRange.baseMipLevel = i - 1u;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+            vkCmdPipelineBarrier(
+                commandBuffer,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                0u, nullptr,
+                0u, nullptr,
+                1u, &barrier
+            );
+
+            VkImageBlit blit = {};
+            blit.srcOffsets[0] = { 0, 0, 0 };
+            blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
+            blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.srcSubresource.mipLevel = i - 1u;
+            blit.srcSubresource.baseArrayLayer = 0u;
+            blit.srcSubresource.layerCount = 1u;
+            blit.dstOffsets[0] = { 0, 0, 0 };
+            blit.dstOffsets[1] = { mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1, 1 };
+            blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.dstSubresource.mipLevel = i;
+            blit.dstSubresource.baseArrayLayer = 0u;
+            blit.dstSubresource.layerCount = 1u;
+
+            vkCmdBlitImage(
+                commandBuffer,
+                image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1u, &blit,
+                VK_FILTER_LINEAR
+            );
+
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+            vkCmdPipelineBarrier(
+                commandBuffer,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                0u, nullptr,
+                0u, nullptr,
+                1u, &barrier
+            );
+
+            if (mipWidth > 1) mipWidth /= 2;
+            if (mipHeight > 1) mipHeight /= 2;
+
+            barrier.subresourceRange.baseMipLevel = mipLevels = 1u;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+            vkCmdPipelineBarrier(
+                commandBuffer,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                0u, nullptr,
+                0u, nullptr,
+                1u, &barrier
+            );
+        }
+
+        endSingleTimeCommands(commandBuffer);
     }
 
     std::vector<const char*> hello_triangle_app::getRequiredExtensions() const {
@@ -1784,7 +1888,8 @@ namespace vulkan_tutorial {
         VkImage image,
         VkFormat format,
         VkImageLayout oldLayout,
-        VkImageLayout newLayout
+        VkImageLayout newLayout,
+        uint32_t mipLevels
     ) {
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
@@ -1796,7 +1901,7 @@ namespace vulkan_tutorial {
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = image;
         barrier.subresourceRange.baseMipLevel = 0u;
-        barrier.subresourceRange.levelCount = 1u;
+        barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = 0u;
         barrier.subresourceRange.layerCount = 1u;
         barrier.srcAccessMask = 0;
