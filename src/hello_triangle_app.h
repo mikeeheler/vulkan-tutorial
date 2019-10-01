@@ -190,7 +190,7 @@ namespace vulkan_tutorial {
             VkImageTiling tiling,
             VkFormatFeatureFlags features) const;
         queue_family_indices findQueueFamilies(VkPhysicalDevice device) const;
-        void generateMipmaps(VkImage image, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
+        void generateMipmaps(VkImage image, VkFormat format, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
         std::vector<const char*> getRequiredExtensions() const;
         bool hasStencilComponent(VkFormat format) const;
         void initVulkan();

@@ -1289,7 +1289,7 @@ namespace vulkan_tutorial {
         copyBufferToImage(stagingBuffer, _textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
         // transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
 
-        generateMipmaps(_textureImage, texWidth, texHeight, _mipLevels);
+        generateMipmaps(_textureImage, VK_FORMAT_R8G8B8A8_UNORM, texWidth, texHeight, _mipLevels);
 
         vkDestroyBuffer(_device, stagingBuffer, nullptr);
         vkFreeMemory(_device, stagingBufferMemory, nullptr);
@@ -1320,7 +1320,7 @@ namespace vulkan_tutorial {
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
         samplerInfo.mipLodBias = 0.0f;
         samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 1.0f;
+        samplerInfo.maxLod = static_cast<float>(_mipLevels);
 
         VkResult result = vkCreateSampler(_device, &samplerInfo, nullptr, &_textureSampler);
         if (result != VK_SUCCESS)
@@ -1539,7 +1539,22 @@ namespace vulkan_tutorial {
         return indices;
     }
 
-    void hello_triangle_app::generateMipmaps(VkImage image, int32_t texWidth, int32_t texHeight, uint32_t mipLevels) {
+    void hello_triangle_app::generateMipmaps(
+        VkImage image,
+        VkFormat imageFormat,
+        int32_t texWidth,
+        int32_t texHeight,
+        uint32_t mipLevels
+    ) {
+        VkFormatProperties formatProperties;
+        vkGetPhysicalDeviceFormatProperties(_physicalDevice, imageFormat, &formatProperties);
+
+        VkFormatFeatureFlagBits requiredFlags = VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+        if ((formatProperties.optimalTilingFeatures & requiredFlags) != requiredFlags)
+            throw std::runtime_error("texture image format does not suppoer linear blitting");
+
+        std::cout << "generating " << mipLevels << " mips." << std::endl;
+
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
         VkImageMemoryBarrier barrier = {};
@@ -1607,21 +1622,21 @@ namespace vulkan_tutorial {
 
             if (mipWidth > 1) mipWidth /= 2;
             if (mipHeight > 1) mipHeight /= 2;
-
-            barrier.subresourceRange.baseMipLevel = mipLevels = 1u;
-            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-            vkCmdPipelineBarrier(
-                commandBuffer,
-                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-                0u, nullptr,
-                0u, nullptr,
-                1u, &barrier
-            );
         }
+
+        barrier.subresourceRange.baseMipLevel = mipLevels = 1u;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+            0u, nullptr,
+            0u, nullptr,
+            1u, &barrier
+        );
 
         endSingleTimeCommands(commandBuffer);
     }
