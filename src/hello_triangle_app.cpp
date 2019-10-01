@@ -1682,7 +1682,7 @@ namespace vulkan_tutorial {
             if (mipHeight > 1) mipHeight /= 2;
         }
 
-        barrier.subresourceRange.baseMipLevel = mipLevels = 1u;
+        barrier.subresourceRange.baseMipLevel = mipLevels - 1u;
         barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
