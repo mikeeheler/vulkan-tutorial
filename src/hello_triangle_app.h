@@ -78,6 +78,7 @@ namespace vulkan_tutorial {
         VkQueue _presentQueue;
 
         VkDebugUtilsMessengerEXT _debugMessenger;
+        VkSampleCountFlagBits _msaaSamples;
 
         // TODO first candidate for first pass refactor into own class
         VkCommandPool _commandPool;
@@ -100,6 +101,10 @@ namespace vulkan_tutorial {
         std::vector<VkFence> _inFlightFences;
         uint32_t _currentFrame;
         bool _framebufferResized;
+
+        VkImage _colorImage;
+        VkDeviceMemory _colorImageMemory;
+        VkImageView _colorImageView;
 
         VkImage _depthImage;
         VkDeviceMemory _depthImageMemory;
@@ -148,6 +153,7 @@ namespace vulkan_tutorial {
             VkBuffer& buffer,
             VkDeviceMemory& bufferMemory
         );
+        void createColorResources();
         void createCommandBuffers();
         void createCommandPool();
         void createDepthResources();
@@ -160,6 +166,7 @@ namespace vulkan_tutorial {
             uint32_t width,
             uint32_t height,
             uint32_t mipLevels,
+            VkSampleCountFlagBits numSamples,
             VkFormat format,
             VkImageTiling tiling,
             VkImageUsageFlags usage,
@@ -191,6 +198,7 @@ namespace vulkan_tutorial {
             VkFormatFeatureFlags features) const;
         queue_family_indices findQueueFamilies(VkPhysicalDevice device) const;
         void generateMipmaps(VkImage image, VkFormat format, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
+        VkSampleCountFlagBits getMaxUsableSampleCount() const;
         std::vector<const char*> getRequiredExtensions() const;
         bool hasStencilComponent(VkFormat format) const;
         void initVulkan();
