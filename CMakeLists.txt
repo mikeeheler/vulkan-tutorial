@@ -24,6 +24,8 @@ link_directories("${VULKAN_SDK_DIR}/lib")
 add_executable (vulkan-tutorial ${vulkan_tutorial_SOURCES})
 target_link_libraries (vulkan-tutorial glfw vulkan)
 
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/textures/angel-1507747.jpg
+    DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/textures)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/models/chalet.obj
     DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/models)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/textures/chalet.jpg
