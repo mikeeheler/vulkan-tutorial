@@ -88,13 +88,25 @@ namespace {
         return out.str();
     }
 
-    void print_extensions() {
+    void print_device_extensions(VkPhysicalDevice physicalDevice) {
+        uint32_t extensionCount = 0u;
+        vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, nullptr);
+        std::vector<VkExtensionProperties> extensions(extensionCount);
+        vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, extensions.data());
+
+        std::cout << "available device extensions:" << std::endl;
+        for (const auto& extension : extensions) {
+            std::cout << "  " << extension.extensionName << std::endl;
+        }
+    }
+
+    void print_instance_extensions() {
         uint32_t extensionCount = 0u;
         vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
         std::vector<VkExtensionProperties> extensions(extensionCount);
         vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
 
-        std::cout << "available extensions:" << std::endl;
+        std::cout << "available instance extensions:" << std::endl;
         for (const auto& extension : extensions) {
             std::cout << "  " << extension.extensionName << std::endl;
         }
@@ -163,6 +175,7 @@ namespace vulkan_tutorial {
             VK_KHR_SWAPCHAIN_EXTENSION_NAME
         },
         _framebufferResized {false},
+        _fullscreenToggleRequested {false},
         _graphicsPipeline {VK_NULL_HANDLE},
         _graphicsQueue {VK_NULL_HANDLE},
         _imageAvailableSemaphores {},
@@ -171,9 +184,16 @@ namespace vulkan_tutorial {
         _indices {},
         _inFlightFences {},
         _instance {VK_NULL_HANDLE},
+        _instanceExtensions {
+            VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME,
+            VK_KHR_DISPLAY_EXTENSION_NAME,
+            VK_KHR_GET_DISPLAY_PROPERTIES_2_EXTENSION_NAME,
+            VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+            VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME
+        },
         _mipLevels {1u},
         _msaaSamples {VK_SAMPLE_COUNT_1_BIT},
-        _physicalDevice {VK_NULL_HANDLE},
+        _physicalDevices {},
         _pipelineLayout {VK_NULL_HANDLE},
         _presentQueue {VK_NULL_HANDLE},
         _renderFinishedSemaphores {},
@@ -192,7 +212,9 @@ namespace vulkan_tutorial {
         _uniformBuffers {},
         _uniformBuffersMemory {},
         _validationLayers {
+#if ENABLE_VALIDATION_LAYERS
             "VK_LAYER_KHRONOS_validation"
+#endif
         },
         _vertexBuffer {VK_NULL_HANDLE},
         _vertexBufferMemory {VK_NULL_HANDLE},
@@ -206,6 +228,7 @@ namespace vulkan_tutorial {
 
     void hello_triangle_app::run() {
         initWindow();
+        initInputHandlers();
         initVulkan();
         mainLoop();
         cleanup();
@@ -243,12 +266,25 @@ namespace vulkan_tutorial {
             requiredExtensions.erase(extension.extensionName);
         }
 
+        if (!requiredExtensions.empty()) {
+            std::cout << "unavailable extensions:" << std::endl;
+            for (const auto& extension : requiredExtensions) {
+                std::cout << "  \"" << extension << '"' << std::endl;
+            }
+        }
+
         return requiredExtensions.empty();
     }
 
     bool hello_triangle_app::checkValidationLayerSupport() const {
+        if (_validationLayers.size() == 0)
+            return true;
+
         uint32_t layerCount;
         vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+
+        if (layerCount == 0)
+            return false;
 
         std::vector<VkLayerProperties> availableLayers(layerCount);
         vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
@@ -361,9 +397,9 @@ namespace vulkan_tutorial {
         }
         vkDestroyCommandPool(_device, _commandPool, nullptr);
         vkDestroyDevice(_device, nullptr);
-        if (ENABLE_VALIDATION_LAYERS) {
+#if ENABLE_VALIDATION_LAYERS
             DestroyDebugUtilsMessengerEXT(_instance, _debugMessenger, nullptr);
-        }
+#endif
         vkDestroySurfaceKHR(_instance, _surface, nullptr);
         vkDestroyInstance(_instance, nullptr);
         _window.destroy();
@@ -381,7 +417,7 @@ namespace vulkan_tutorial {
         _graphicsQueue = VK_NULL_HANDLE;
         _mipLevels = 1u;
         _msaaSamples = VK_SAMPLE_COUNT_1_BIT;
-        _physicalDevice = VK_NULL_HANDLE;
+        _physicalDevices.clear();
         _renderFinishedSemaphores.clear();
         _surface = VK_NULL_HANDLE;
         _textureImage = VK_NULL_HANDLE;
@@ -419,6 +455,7 @@ namespace vulkan_tutorial {
 
         _commandBuffers.clear();
         _descriptorPool = VK_NULL_HANDLE;
+        _fullscreenToggleRequested = false;
         _framebufferResized = false;
         _graphicsPipeline = VK_NULL_HANDLE;
         _pipelineLayout = VK_NULL_HANDLE;
@@ -579,7 +616,7 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::createCommandPool() {
-        queue_family_indices queueFamilyIndices = findQueueFamilies(_physicalDevice);
+        queue_family_indices queueFamilyIndices = findQueueFamilies();
 
         VkCommandPoolCreateInfo poolInfo = {};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -1010,14 +1047,21 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::createInstance() {
-        if (ENABLE_VALIDATION_LAYERS && !checkValidationLayerSupport()) {
+#if ENABLE_VALIDATION_LAYERS
+        if (!checkValidationLayerSupport()) {
             throw std::runtime_error("validation layers requested, but not available!");
         }
+#endif
 
         auto appInfo = create_vk_application_info();
         auto extensions = getRequiredExtensions();
 
-        print_extensions();
+        std::cout << "required instance extensions:" << std::endl;
+        for (const auto& extension : extensions) {
+            std::cout << "  " << extension << std::endl;
+        }
+
+        print_instance_extensions();
 
         VkInstanceCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -1025,18 +1069,17 @@ namespace vulkan_tutorial {
         createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
         createInfo.ppEnabledExtensionNames = extensions.data();
 
+#if ENABLE_VALIDATION_LAYERS
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
-        if (ENABLE_VALIDATION_LAYERS) {
-            createInfo.enabledLayerCount = static_cast<uint32_t>(_validationLayers.size());
-            createInfo.ppEnabledLayerNames = _validationLayers.data();
+        createInfo.enabledLayerCount = static_cast<uint32_t>(_validationLayers.size());
+        createInfo.ppEnabledLayerNames = _validationLayers.data();
 
-            populateDebugMessengerCreateInfo(debugCreateInfo);
-            createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
-        }
-        else {
-            createInfo.enabledLayerCount = 0u;
-            createInfo.pNext = nullptr;
-        }
+        populateDebugMessengerCreateInfo(debugCreateInfo);
+        createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
+#else
+        createInfo.enabledLayerCount = 0u;
+        createInfo.pNext = nullptr;
+#endif
 
         VkResult result = vkCreateInstance(&createInfo, nullptr, &_instance);
         if (result != VK_SUCCESS)
@@ -1044,7 +1087,7 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::createLogicalDevice() {
-        queue_family_indices indices = findQueueFamilies(_physicalDevice);
+        queue_family_indices indices = findQueueFamilies();
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
         std::set<uint32_t> uniqueQueueFamilies = {
@@ -1074,15 +1117,21 @@ namespace vulkan_tutorial {
         createInfo.enabledExtensionCount = static_cast<uint32_t>(_deviceExtensions.size());
         createInfo.ppEnabledExtensionNames = _deviceExtensions.data();
 
-        if (ENABLE_VALIDATION_LAYERS) {
-            createInfo.enabledLayerCount = static_cast<uint32_t>(_validationLayers.size());
-            createInfo.ppEnabledLayerNames = _validationLayers.data();
-        }
-        else {
-            createInfo.enabledLayerCount = 0u;
-        }
+        VkDeviceGroupDeviceCreateInfo groupCreateInfo = {};
+        groupCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO;
+        groupCreateInfo.physicalDeviceCount = static_cast<uint32_t>(_physicalDevices.size());
+        groupCreateInfo.pPhysicalDevices = _physicalDevices.data();
 
-        VkResult result = vkCreateDevice(_physicalDevice, &createInfo, nullptr, &_device);
+        createInfo.pNext = &groupCreateInfo;
+
+#if ENABLE_VALIDATION_LAYERS
+        createInfo.enabledLayerCount = static_cast<uint32_t>(_validationLayers.size());
+        createInfo.ppEnabledLayerNames = _validationLayers.data();
+#else
+        createInfo.enabledLayerCount = 0u;
+#endif
+
+        VkResult result = vkCreateDevice(_physicalDevices[0], &createInfo, nullptr, &_device);
         if (result != VK_SUCCESS) {
             throw std::runtime_error("failed to create logical device!");
         }
@@ -1222,7 +1271,7 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::createSwapchain() {
-        swap_chain_support_details swapchainSupport = querySwapchainSupport(_physicalDevice);
+        swap_chain_support_details swapchainSupport = querySwapchainSupport(_physicalDevices[0]);
 
         VkExtent2D extent = chooseSwapExtent(swapchainSupport.capabilities);
         VkPresentModeKHR presentMode = chooseSwapPresentMode(swapchainSupport.presentModes);
@@ -1246,7 +1295,7 @@ namespace vulkan_tutorial {
         createInfo.imageArrayLayers = 1u;
         createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-        queue_family_indices indices = findQueueFamilies(_physicalDevice);
+        queue_family_indices indices = findQueueFamilies();
         uint32_t queueFamilyIndices[] = {
             indices.graphicsFamily.value(),
             indices.presentFamily.value()
@@ -1484,7 +1533,11 @@ namespace vulkan_tutorial {
         presentInfo.pResults = nullptr;
 
         result = vkQueuePresentKHR(_presentQueue, &presentInfo);
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || _framebufferResized) {
+        if (result == VK_ERROR_OUT_OF_DATE_KHR
+            || result == VK_SUBOPTIMAL_KHR
+            || _framebufferResized
+            || _fullscreenToggleRequested
+        ) {
             recreateSwapchain();
         }
         else if (result != VK_SUCCESS) {
@@ -1526,7 +1579,7 @@ namespace vulkan_tutorial {
 
     uint32_t hello_triangle_app::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const {
         VkPhysicalDeviceMemoryProperties memProperties;
-        vkGetPhysicalDeviceMemoryProperties(_physicalDevice, &memProperties);
+        vkGetPhysicalDeviceMemoryProperties(_physicalDevices[0], &memProperties);
 
         for (uint32_t i = 0u; i < memProperties.memoryTypeCount; ++i) {
             bool matchesFilter = (typeFilter & (1 << i)) != 0u;
@@ -1546,7 +1599,7 @@ namespace vulkan_tutorial {
     ) const {
         for (VkFormat format : candidates) {
             VkFormatProperties props;
-            vkGetPhysicalDeviceFormatProperties(_physicalDevice, format, &props);
+            vkGetPhysicalDeviceFormatProperties(_physicalDevices[0], format, &props);
 
             if (
                 tiling == VK_IMAGE_TILING_LINEAR
@@ -1565,14 +1618,13 @@ namespace vulkan_tutorial {
         return VK_FORMAT_UNDEFINED;
     }
 
-    queue_family_indices hello_triangle_app::findQueueFamilies(VkPhysicalDevice device) const {
+    queue_family_indices hello_triangle_app::findQueueFamilies(VkPhysicalDevice physicalDevice) const {
         queue_family_indices indices;
 
         uint32_t queueFamilyCount = 0u;
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-
+        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
         std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.data());
 
         for (int i = 0; i < queueFamilies.size(); ++i) {
             const auto& queueFamily = queueFamilies[i];
@@ -1584,7 +1636,7 @@ namespace vulkan_tutorial {
             }
 
             VkBool32 presentSupport = false;
-            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, _surface, &presentSupport);
+            vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, _surface, &presentSupport);
             if (queueFamily.queueCount > 0 && presentSupport) {
                 indices.presentFamily = i;
             }
@@ -1597,6 +1649,18 @@ namespace vulkan_tutorial {
         return indices;
     }
 
+    queue_family_indices hello_triangle_app::findQueueFamilies() const {
+        queue_family_indices indices;
+        for (const auto& physicalDevice : _physicalDevices) {
+            auto thisIndices = findQueueFamilies(physicalDevice);
+            if (!indices.graphicsFamily.has_value())
+                indices.graphicsFamily = thisIndices.graphicsFamily;
+            if (!indices.presentFamily.has_value())
+                indices.presentFamily = thisIndices.presentFamily;
+        }
+        return indices;
+    }
+
     void hello_triangle_app::generateMipmaps(
         VkImage image,
         VkFormat imageFormat,
@@ -1605,7 +1669,7 @@ namespace vulkan_tutorial {
         uint32_t mipLevels
     ) {
         VkFormatProperties formatProperties;
-        vkGetPhysicalDeviceFormatProperties(_physicalDevice, imageFormat, &formatProperties);
+        vkGetPhysicalDeviceFormatProperties(_physicalDevices[0], imageFormat, &formatProperties);
 
         VkFormatFeatureFlagBits requiredFlags = VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
         if ((formatProperties.optimalTilingFeatures & requiredFlags) != requiredFlags)
@@ -1700,28 +1764,36 @@ namespace vulkan_tutorial {
     }
 
     VkSampleCountFlagBits hello_triangle_app::getMaxUsableSampleCount() const {
-        VkPhysicalDeviceProperties physicalDeviceProperties;
-        vkGetPhysicalDeviceProperties(_physicalDevice, &physicalDeviceProperties);
-
-        VkSampleCountFlags counts = std::min(
-            physicalDeviceProperties.limits.framebufferColorSampleCounts,
-            physicalDeviceProperties.limits.framebufferDepthSampleCounts
-        );
+        std::vector<VkSampleCountFlagBits> allSampleCounts;
 
         #define TEST_SAMPLE_COUNT(x) \
-            if ((counts & VK_SAMPLE_COUNT_##x##_BIT) == VK_SAMPLE_COUNT_##x##_BIT) \
-                return VK_SAMPLE_COUNT_##x##_BIT;
+            if ((counts & VK_SAMPLE_COUNT_##x##_BIT) == VK_SAMPLE_COUNT_##x##_BIT) { \
+                allSampleCounts.push_back(VK_SAMPLE_COUNT_##x##_BIT); \
+                continue; \
+            }
 
-        TEST_SAMPLE_COUNT(64);
-        TEST_SAMPLE_COUNT(32);
-        TEST_SAMPLE_COUNT(16);
-        TEST_SAMPLE_COUNT(8);
-        TEST_SAMPLE_COUNT(4);
-        TEST_SAMPLE_COUNT(2);
+        for (const auto& physicalDevice : _physicalDevices) {
+            VkPhysicalDeviceProperties physicalDeviceProperties;
+            vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
+
+            VkSampleCountFlags counts = std::min(
+                physicalDeviceProperties.limits.framebufferColorSampleCounts,
+                physicalDeviceProperties.limits.framebufferDepthSampleCounts
+            );
+
+            TEST_SAMPLE_COUNT(64);
+            TEST_SAMPLE_COUNT(32);
+            TEST_SAMPLE_COUNT(16);
+            TEST_SAMPLE_COUNT(8);
+            TEST_SAMPLE_COUNT(4);
+            TEST_SAMPLE_COUNT(2);
+
+            return VK_SAMPLE_COUNT_1_BIT;
+        }
 
         #undef TEST_SAMPLE_COUNT
 
-        return VK_SAMPLE_COUNT_1_BIT;
+        return *std::min_element(allSampleCounts.begin(), allSampleCounts.end());
     }
 
     std::vector<const char*> hello_triangle_app::getRequiredExtensions() const {
@@ -1730,12 +1802,31 @@ namespace vulkan_tutorial {
         glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
         std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-
-        if (ENABLE_VALIDATION_LAYERS) {
-            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        for (const auto& extension : _instanceExtensions) {
+            extensions.push_back(extension);
         }
 
+#if ENABLE_VALIDATION_LAYERS
+        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+#endif
+
         return extensions;
+    }
+
+    void hello_triangle_app::handleGlfwKeyPress(GLFWwindow* window, int key, int scancode, int action, int mods) {
+        if (window == nullptr) return;
+        auto app = reinterpret_cast<vulkan_tutorial::hello_triangle_app*>(glfwGetWindowUserPointer(window));
+        if (app == nullptr) return;
+
+        app->handleKeyPress(key, scancode, action, mods);
+    }
+
+    void hello_triangle_app::handleKeyPress(int key, int scancode, int action, int mods) {
+        if (action != GLFW_RELEASE) return;
+
+        bool altDown = (mods & GLFW_MOD_ALT) == GLFW_MOD_ALT;
+        if (altDown && (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER))
+            toggleFullscreen();
     }
 
     bool hello_triangle_app::hasStencilComponent(VkFormat format) const {
@@ -1744,6 +1835,10 @@ namespace vulkan_tutorial {
             || format == VK_FORMAT_D32_SFLOAT_S8_UINT
             || format == VK_FORMAT_D16_UNORM_S8_UINT
             || format == VK_FORMAT_S8_UINT;
+    }
+
+    void hello_triangle_app::initInputHandlers() {
+        glfwSetKeyCallback(_window, &handleGlfwKeyPress);
     }
 
     void hello_triangle_app::initVulkan() {
@@ -1785,6 +1880,10 @@ namespace vulkan_tutorial {
         _window.init(INITIAL_WIDTH, INITIAL_HEIGHT, "Vulkan Test");
         glfwSetWindowUserPointer(_window.get(), this);
         glfwSetFramebufferSizeCallback(_window.get(), framebufferResizeCallback);
+    }
+
+    bool hello_triangle_app::isFullscreen() const {
+        return false;
     }
 
     void hello_triangle_app::loadModel() {
@@ -1837,34 +1936,43 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::pickPhysicalDevice() {
-        uint32_t deviceCount = 0u;
-        vkEnumeratePhysicalDevices(_instance, &deviceCount, nullptr);
-        if (deviceCount == 0u) {
-            throw std::runtime_error("failed to find GPUs with Vulkan support!");
+        uint32_t deviceGroupCount = 0u;
+        vkEnumeratePhysicalDeviceGroups(_instance, &deviceGroupCount, nullptr);
+        std::vector<VkPhysicalDeviceGroupProperties> deviceGroups(deviceGroupCount);
+        vkEnumeratePhysicalDeviceGroups(_instance, &deviceGroupCount, deviceGroups.data());
+
+        std::multimap<int32_t, VkPhysicalDeviceGroupProperties> candidates;
+
+        std::cout << "physical device groups:" << std::endl;
+        for (int i = 0; i < deviceGroups.size(); ++i) {
+            std::cout << "  device group #" << i << ':' << std::endl;
+            const auto& deviceGroup = deviceGroups[i];
+            if (deviceGroup.physicalDeviceCount == 0) {
+                std::cout << "    no devices" << std::endl;
+                continue;
+            }
+
+            std::cout << "    devices (" << deviceGroup.physicalDeviceCount << "):" << std::endl;
+            int32_t score = INT32_MAX;
+            for (int j = 0; j < deviceGroup.physicalDeviceCount; ++j) {
+                const auto& device = deviceGroup.physicalDevices[j];
+                VkPhysicalDeviceProperties deviceProperties;
+                vkGetPhysicalDeviceProperties(device, &deviceProperties);
+                std::cout << "      " << deviceProperties.deviceName << std::endl;
+                if (j == 0)
+                    print_device_extensions(device);
+                score = std::min(score, rateDeviceSuitability(device));
+            }
+            candidates.insert(std::make_pair(score, deviceGroup));
         }
 
-        std::vector<VkPhysicalDevice> devices(deviceCount);
-        vkEnumeratePhysicalDevices(_instance, &deviceCount, devices.data());
-
-        std::multimap<int, VkPhysicalDevice> candidates;
-
-        VkPhysicalDeviceProperties deviceProperties;
-        for (int i = 0; i < devices.size(); ++i) {
-            const auto& device = devices[i];
-            vkGetPhysicalDeviceProperties(device, &deviceProperties);
-
-            std::cout << "device #" << i << ": " << deviceProperties.deviceName << std::endl;
-            std::cout << "  api      : " << getVersionString(deviceProperties.apiVersion) << std::endl;
-            std::cout << "  driver   : " << getVersionString(deviceProperties.driverVersion) << std::endl;
-            std::cout << "  vendor_id: " << reinterpret_cast<void*>(deviceProperties.vendorID) << std::endl;
-            std::cout << "  device_id: " << reinterpret_cast<void*>(deviceProperties.deviceID) << std::endl;
-
-            int score = rateDeviceSuitability(device);
-            candidates.insert(std::make_pair(score, device));
-        }
-
-        if (candidates.rbegin()->first > 0) {
-            _physicalDevice = candidates.rbegin()->second;
+        const auto& winner = candidates.rbegin();
+        if (winner->first > 0) {
+            _physicalDevices.clear();
+            _physicalDevices.insert(
+                _physicalDevices.begin(),
+                winner->second.physicalDevices,
+                winner->second.physicalDevices + winner->second.physicalDeviceCount);
             _msaaSamples = getMaxUsableSampleCount();
             std::cout << "using msaa samples: " << _msaaSamples << std::endl;
         }
@@ -1912,12 +2020,12 @@ namespace vulkan_tutorial {
         return details;
     }
 
-    int hello_triangle_app::rateDeviceSuitability(VkPhysicalDevice device) const {
-        if (!checkDeviceExtensionsSupport(device)) {
+    int32_t hello_triangle_app::rateDeviceSuitability(VkPhysicalDevice physicalDevice) const {
+        if (!checkDeviceExtensionsSupport(physicalDevice)) {
             return 0;
         }
 
-        swap_chain_support_details swapchainSupport = querySwapchainSupport(device);
+        swap_chain_support_details swapchainSupport = querySwapchainSupport(physicalDevice);
         if (swapchainSupport.formats.empty()
             || swapchainSupport.presentModes.empty())
         {
@@ -1927,8 +2035,8 @@ namespace vulkan_tutorial {
         VkPhysicalDeviceFeatures deviceFeatures;
         VkPhysicalDeviceProperties deviceProperties;
 
-        vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-        vkGetPhysicalDeviceProperties(device, &deviceProperties);
+        vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
+        vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
 
         if (!deviceFeatures.samplerAnisotropy)
             return 0;
@@ -1941,10 +2049,9 @@ namespace vulkan_tutorial {
 
         score += deviceProperties.limits.maxImageDimension2D;
 
-        queue_family_indices indices = findQueueFamilies(device);
+        queue_family_indices indices = findQueueFamilies(physicalDevice);
         if (indices.isComplete())
             score += 1000;
-
 
         return score;
     }
@@ -1974,9 +2081,7 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::setupDebugMessenger() {
-        if (!ENABLE_VALIDATION_LAYERS)
-            return;
-
+#if ENABLE_VALIDATION_LAYERS
         VkDebugUtilsMessengerCreateInfoEXT createInfo = {};
         populateDebugMessengerCreateInfo(createInfo);
 
@@ -1984,6 +2089,7 @@ namespace vulkan_tutorial {
         if (result != VK_SUCCESS) {
             throw std::runtime_error("failed to set up the debug messenger!");
         }
+#endif
     }
 
     void hello_triangle_app::transitionImageLayout(
@@ -2073,6 +2179,10 @@ namespace vulkan_tutorial {
         );
 
         endSingleTimeCommands(commandBuffer);
+    }
+
+    void hello_triangle_app::toggleFullscreen() {
+        _fullscreenToggleRequested = true;
     }
 
     void hello_triangle_app::updateUniformBuffer(uint32_t currentImage) {

@@ -8,6 +8,10 @@
 #include <optional>
 #include <vector>
 
+#ifndef NDEBUG
+#define ENABLE_VALIDATION_LAYERS 1
+#endif
+
 namespace vulkan_tutorial {
     struct queue_family_indices {
         std::optional<uint32_t> graphicsFamily;
@@ -52,12 +56,6 @@ namespace vulkan_tutorial {
         void run();
 
     private:
-        #ifdef NDEBUG
-        static const bool ENABLE_VALIDATION_LAYERS = false;
-        #else
-        static const bool ENABLE_VALIDATION_LAYERS = true;
-        #endif
-
         static const int INITIAL_HEIGHT = 600;
         static const int INITIAL_WIDTH = 800;
         static const int MAX_FRAMES_IN_FLIGHT = 3;
@@ -65,13 +63,16 @@ namespace vulkan_tutorial {
         const std::string MODEL_PATH = "models/chalet.obj";
         const std::string TEXTURE_PATH = "textures/chalet.jpg";
 
+        bool _fullscreenToggleRequested;
+
         scoped_glfw_window _window;
 
         VkInstance _instance;
         VkSurfaceKHR _surface;
         VkDevice _device;
-        VkPhysicalDevice _physicalDevice;
+        std::vector<VkPhysicalDevice> _physicalDevices;
         const std::vector<const char*> _deviceExtensions;
+        const std::vector<const char*> _instanceExtensions;
         const std::vector<const char*> _validationLayers;
 
         VkQueue _graphicsQueue;
@@ -196,21 +197,27 @@ namespace vulkan_tutorial {
             const std::vector<VkFormat>& candidates,
             VkImageTiling tiling,
             VkFormatFeatureFlags features) const;
-        queue_family_indices findQueueFamilies(VkPhysicalDevice device) const;
+        queue_family_indices findQueueFamilies(VkPhysicalDevice physicalDevice) const;
+        queue_family_indices findQueueFamilies() const;
         void generateMipmaps(VkImage image, VkFormat format, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
         VkSampleCountFlagBits getMaxUsableSampleCount() const;
         std::vector<const char*> getRequiredExtensions() const;
+        static void handleGlfwKeyPress(GLFWwindow* window, int key, int scancode, int action, int mods);
+        void handleKeyPress(int32_t key, int32_t scancode, int32_t action, int32_t mods);
         bool hasStencilComponent(VkFormat format) const;
+        void initInputHandlers();
         void initVulkan();
         void initWindow();
+        bool isFullscreen() const;
         void loadModel();
         void mainLoop();
         void pickPhysicalDevice();
         void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) const;
         swap_chain_support_details querySwapchainSupport(VkPhysicalDevice device) const;
-        int rateDeviceSuitability(VkPhysicalDevice device) const;
+        int32_t rateDeviceSuitability(VkPhysicalDevice device) const;
         void recreateSwapchain();
         void setupDebugMessenger();
+        void toggleFullscreen();
         void transitionImageLayout(
             VkImage image,
             VkFormat format,

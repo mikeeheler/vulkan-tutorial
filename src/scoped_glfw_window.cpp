@@ -14,14 +14,6 @@ namespace vulkan_tutorial {
         destroy();
     }
 
-    const GLFWwindow* scoped_glfw_window::get() const {
-        return _window;
-    }
-
-    GLFWwindow* scoped_glfw_window::get() {
-        return _window;
-    }
-
     void scoped_glfw_window::destroy() {
         if (_window == nullptr)
             return;
@@ -37,7 +29,4 @@ namespace vulkan_tutorial {
         _window = glfwCreateWindow(width, height, title, nullptr, nullptr);
         _owned = true;
     }
-
-    scoped_glfw_window::operator const GLFWwindow*() const { return _window; }
-    scoped_glfw_window::operator GLFWwindow*() { return _window; }
 }
