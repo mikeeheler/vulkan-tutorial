@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(VULKAN_SDK_DIR "ext/vulkan-sdk-1.1.121.1/x86_64")
 set(VK_LAYER_PATH "${VULKAN_SDK_DIR}/etc/vulkan/explicit_layer.d")
 set(vulkan_tutorial_SOURCES
+    src/vkf/vulkan_device.cc
+    src/vkf/vulkan_initializers.cc
     src/hello_triangle_app
     src/main.cpp
     src/scoped_glfw_window.cpp

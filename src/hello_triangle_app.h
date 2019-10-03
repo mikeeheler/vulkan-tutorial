@@ -3,6 +3,8 @@
 #include "scoped_glfw_window.h"
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
+#include <vulkan/vulkan.h>
+
 #include <array>
 #include <memory>
 #include <optional>

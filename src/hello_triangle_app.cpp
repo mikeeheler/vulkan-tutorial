@@ -7,6 +7,7 @@
 #include <glm/gtx/hash.hpp>
 #include <stb/stb_image.h>
 #include <tiny_obj_loader.h>
+#include <vulkan/vulkan.h>
 
 #include <algorithm>
 #include <array>
