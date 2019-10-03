@@ -10,7 +10,9 @@ set(vulkan_tutorial_SOURCES
     src/scoped_glfw_window.cpp
     src/tiny_obj_loader.cc)
 
-find_package(glfw3 3.2)
+find_package(glfw3 3.3 REQUIRED)
+
+message(STATUS "glfw3 ${glfw3_VERSION} at ${glfw3_DIR}")
 
 add_definitions(-DGLFW_INCLUDE_VULKAN
                 -DGLM_ENABLE_EXPERIMENTAL

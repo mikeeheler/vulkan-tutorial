@@ -6,7 +6,13 @@ Basis: https://vulkan-tutorial.com/Introduction
 
 * Download [Vulkan SDK 1.1.121.1](https://vulkan.lunarg.com/sdk/home#sdk/downloadConfirm/1.1.121.1/linux/vulkansdk-linux-x86_64-1.1.121.1.tar.gz)
 * Extract to ext/vulkan-sdk-1.1.121.1
-* Install libglfw3-dev (Ubuntu) or the equivalent for your dist
+
+    ```
+    $ git submodule update --init
+    $ cd ext/glfw
+    $ cmake
+    $ make install
+    ```
 
 This could be ported to other platforms, but I can't be arsed.
 
