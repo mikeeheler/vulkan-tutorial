@@ -23,7 +23,8 @@
 			"stdexcept": "cpp",
 			"typeinfo": "cpp",
 			"*.tcc": "cpp",
-			"optional": "cpp"
+			"optional": "cpp",
+			"cstdio": "cpp"
 		},
 		"C_Cpp.loggingLevel": "Debug",
 		"clang.cxxflags": ["-Wno-pragma-once-outside-header"]

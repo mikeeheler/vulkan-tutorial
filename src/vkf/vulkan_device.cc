@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <assert.h>
+#include <cstring>
 #include <exception>
 
 namespace vkf {
@@ -256,6 +257,90 @@ namespace vkf {
         _p->command_pool = CreateCommandPool(_p->queue_family_indices.graphics);
 
         return VK_SUCCESS;
+    }
+
+    VkResult VulkanDevice::CreateBuffer(
+        VkBufferUsageFlags usage_flags,
+        VkMemoryPropertyFlags memory_property_flags,
+        VkDeviceSize size,
+        VkBuffer* buffer,
+        VkDeviceMemory* memory,
+        void* data
+    ) const {
+        assert(buffer != nullptr);
+        assert(memory != nullptr);
+
+        *buffer = VK_NULL_HANDLE;
+        *memory = VK_NULL_HANDLE;
+
+        VkResult result = VK_SUCCESS;
+
+        VkBuffer result_buffer = VK_NULL_HANDLE;
+        VkDeviceMemory result_memory = VK_NULL_HANDLE;
+
+        const auto clear_result = [this, result_buffer, result_memory]() {
+            if (result_buffer != VK_NULL_HANDLE)
+                vkDestroyBuffer(_p->logical_device, result_buffer, nullptr);
+            if (result_memory != VK_NULL_HANDLE)
+                vkFreeMemory(_p->logical_device, result_memory, nullptr);
+        };
+
+        VkBufferCreateInfo create_info = initializers::BufferCreateInfo(usage_flags, size);
+        create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        result = vkCreateBuffer(_p->logical_device, &create_info, nullptr, &result_buffer);
+        if (result != VK_SUCCESS)
+            return result;
+
+        VkMemoryRequirements memory_requirements;
+        VkMemoryAllocateInfo memory_alloc_info = initializers::MemoryAllocateInfo();
+        vkGetBufferMemoryRequirements(_p->logical_device, result_buffer, &memory_requirements);
+        memory_alloc_info.allocationSize = memory_requirements.size;
+        if (!FindMemoryType(
+            memory_requirements.memoryTypeBits,
+            memory_property_flags,
+            &memory_alloc_info.memoryTypeIndex
+        )) {
+            clear_result();
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        }
+        result = vkAllocateMemory(_p->logical_device, &memory_alloc_info, nullptr, &result_memory);
+        if (result != VK_SUCCESS) {
+            clear_result();
+            return result;
+        }
+
+        if (data != nullptr) {
+            void* mapped;
+            result = vkMapMemory(_p->logical_device, result_memory, 0, size, 0, &mapped);
+            if (result != VK_SUCCESS) {
+                clear_result();
+                return result;
+            }
+            memcpy(mapped, data, size);
+            if ((memory_property_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0u) {
+                VkMappedMemoryRange mapped_range = initializers::MappedMemoryRange();
+                mapped_range.memory = result_memory;
+                mapped_range.offset = 0;
+                mapped_range.size = size;
+                result = vkFlushMappedMemoryRanges(_p->logical_device, 1u, &mapped_range);
+                if (result != VK_SUCCESS) {
+                    clear_result();
+                    return result;
+                }
+            }
+            vkUnmapMemory(_p->logical_device, result_memory);
+        }
+
+        result = vkBindBufferMemory(_p->logical_device, result_buffer, result_memory, 0);
+        if (result != VK_SUCCESS) {
+            clear_result();
+            return result;
+        }
+
+        *buffer = result_buffer;
+        *memory = result_memory;
+
+        return result;
     }
 
     VkCommandBuffer VulkanDevice::CreateCommandBuffer(VkCommandBufferLevel level, bool begin) const {

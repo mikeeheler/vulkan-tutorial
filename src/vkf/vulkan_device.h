@@ -33,6 +33,14 @@ namespace vkf {
             VkQueueFlags queue_types = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT
         );
 
+        VkResult CreateBuffer(
+            VkBufferUsageFlags usage_flags,
+            VkMemoryPropertyFlags memory_property_flags,
+            VkDeviceSize size,
+            VkBuffer* buffer,
+            VkDeviceMemory* memory,
+            void* data = nullptr
+        ) const;
         VkCommandBuffer CreateCommandBuffer(VkCommandBufferLevel level, bool begin = false) const;
         VkCommandPool CreateCommandPool(
             uint32_t queue_family_index,
