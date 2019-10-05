@@ -6,6 +6,7 @@
 #include <vulkan/vulkan.h>
 
 #include <array>
+#include <experimental/propagate_const>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -58,6 +59,8 @@ namespace vulkan_tutorial {
         void run();
 
     private:
+        struct Impl; std::experimental::propagate_const<std::unique_ptr<Impl>> _p;
+
         static const int INITIAL_HEIGHT = 600;
         static const int INITIAL_WIDTH = 800;
         static const int MAX_FRAMES_IN_FLIGHT = 3;
@@ -71,9 +74,6 @@ namespace vulkan_tutorial {
 
         VkInstance _instance;
         VkSurfaceKHR _surface;
-        VkDevice _device;
-        std::vector<VkPhysicalDevice> _physicalDevices;
-        const std::vector<const char*> _deviceExtensions;
         const std::vector<const char*> _instanceExtensions;
         const std::vector<const char*> _validationLayers;
 
@@ -83,8 +83,6 @@ namespace vulkan_tutorial {
         VkDebugUtilsMessengerEXT _debugMessenger;
         VkSampleCountFlagBits _msaaSamples;
 
-        // TODO first candidate for first pass refactor into own class
-        VkCommandPool _commandPool;
         VkPipeline _graphicsPipeline;
         VkDescriptorPool _descriptorPool;
         VkDescriptorSetLayout _descriptorSetLayout;
@@ -158,7 +156,6 @@ namespace vulkan_tutorial {
         );
         void createColorResources();
         void createCommandBuffers();
-        void createCommandPool();
         void createDepthResources();
         void createDescriptorPool();
         void createDescriptorSetLayout();
@@ -194,13 +191,10 @@ namespace vulkan_tutorial {
         void drawFrame();
         void endSingleTimeCommands(VkCommandBuffer commandBuffer);
         VkFormat findDepthFormat() const;
-        uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
         VkFormat findSupportedFormat(
             const std::vector<VkFormat>& candidates,
             VkImageTiling tiling,
             VkFormatFeatureFlags features) const;
-        queue_family_indices findQueueFamilies(VkPhysicalDevice physicalDevice) const;
-        queue_family_indices findQueueFamilies() const;
         void generateMipmaps(VkImage image, VkFormat format, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
         VkSampleCountFlagBits getMaxUsableSampleCount() const;
         std::vector<const char*> getRequiredExtensions() const;

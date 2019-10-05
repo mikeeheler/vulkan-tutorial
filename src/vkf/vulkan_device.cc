@@ -78,9 +78,8 @@ namespace vkf {
 
         if (_p->logical_device != VK_NULL_HANDLE)
             vkDestroyDevice(_p->logical_device, nullptr);
-
-        _p.reset();
     }
+
 
     VkPhysicalDevice VulkanDevice::GetPhysicalDevice() const {
         return _p->physical_device;
@@ -104,6 +103,23 @@ namespace vkf {
 
     VkCommandPool VulkanDevice::GetDefaultCommandPool() const {
         return _p->command_pool;
+    }
+
+    bool VulkanDevice::FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties, uint32_t* memoryType) const {
+        assert(memoryType != nullptr);
+
+        for (uint32_t i = 0u; i < _p->memory_properties.memoryTypeCount; ++i) {
+            if ((typeBits & 1u) != 0u) {
+                if ((_p->memory_properties.memoryTypes[i].propertyFlags & properties) == properties) {
+                    *memoryType = i;
+                    return true;
+                }
+            }
+            typeBits >>= 1;
+        }
+
+        *memoryType = 0u;
+        return false;
     }
 
     bool VulkanDevice::GetQueueFamilyIndex(VkQueueFlagBits queue_flags, uint32_t* queue_index) const {
@@ -150,6 +166,10 @@ namespace vkf {
     bool VulkanDevice::IsExtensionSupported(const char* extension_name) const {
         auto it = std::find(_p->supported_extensions.begin(), _p->supported_extensions.end(), extension_name);
         return it != _p->supported_extensions.end();
+    }
+
+    VkResult VulkanDevice::InitLogicalDevice(VkQueueFlags queue_types) {
+        return InitLogicalDevice(_p->features, {}, nullptr, true, queue_types);
     }
 
     VkResult VulkanDevice::InitLogicalDevice(
@@ -283,6 +303,10 @@ namespace vkf {
 
         if (free)
             vkFreeCommandBuffers(_p->logical_device, _p->command_pool, 1u, &command_buffer);
+    }
+
+    void VulkanDevice::WaitIdle() const {
+        vkDeviceWaitIdle(_p->logical_device);
     }
 
     VulkanDevice::operator VkDevice() { return _p->logical_device; }

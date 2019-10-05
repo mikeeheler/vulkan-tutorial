@@ -21,7 +21,9 @@
 		],
 		"files.associations": {
 			"stdexcept": "cpp",
-			"typeinfo": "cpp"
+			"typeinfo": "cpp",
+			"*.tcc": "cpp",
+			"optional": "cpp"
 		},
 		"C_Cpp.loggingLevel": "Debug",
 		"clang.cxxflags": ["-Wno-pragma-once-outside-header"]

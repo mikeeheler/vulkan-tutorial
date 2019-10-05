@@ -13,5 +13,7 @@
     } \
 }
 
+#define USE_VALIDATION_LAYERS 1
+
 #define DEFAULT_FENCE_TIMEOUT UINT64_MAX
 #define VK_FLAGS_NONE 0
