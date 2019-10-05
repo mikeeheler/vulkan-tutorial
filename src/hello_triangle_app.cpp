@@ -169,7 +169,7 @@ namespace vulkan_tutorial {
         _colorImageMemory {VK_NULL_HANDLE},
         _colorImageView {VK_NULL_HANDLE},
         _commandBuffers {},
-        _currentFrame(0u),
+        _currentFrame {0u},
         _debugMessenger {nullptr},
         _depthImage {VK_NULL_HANDLE},
         _depthImageMemory {VK_NULL_HANDLE},
@@ -215,7 +215,7 @@ namespace vulkan_tutorial {
         _uniformBuffersMemory {},
         _validationLayers {
 #if ENABLE_VALIDATION_LAYERS
-            "VK_LAYER_KHRONOS_validation"
+            "VK_LAYER_LUNARG_standard_validation"
 #endif
         },
         _vertexBuffer {VK_NULL_HANDLE},
