@@ -15,16 +15,21 @@ namespace vkf {
         VkPhysicalDeviceFeatures features;
         VkPhysicalDeviceFeatures enabled_features;
         VkPhysicalDeviceMemoryProperties memory_properties;
-        std::vector<VkQueueFamilyProperties> queue_family_properties;
         std::vector<std::string> supported_extensions;
         VkCommandPool command_pool;
+
         bool enable_debug_markers;
 
+        std::vector<VkQueueFamilyProperties> queue_family_properties;
         struct {
             uint32_t graphics;
             uint32_t compute;
             uint32_t transfer;
         } queue_family_indices;
+
+        VkQueue compute_queue;
+        VkQueue graphics_queue;
+        VkQueue transfer_queue;
 
         Impl(VkPhysicalDevice physical_device)
             : physical_device {physical_device},
@@ -33,11 +38,14 @@ namespace vkf {
               features {},
               enabled_features {},
               memory_properties {},
-              queue_family_properties {},
               supported_extensions {},
               command_pool {VK_NULL_HANDLE},
               enable_debug_markers {false},
-              queue_family_indices {0u, 0u, 0u}
+              queue_family_properties {},
+              queue_family_indices {UINT32_MAX, UINT32_MAX, UINT32_MAX},
+              compute_queue {VK_NULL_HANDLE},
+              graphics_queue {VK_NULL_HANDLE},
+              transfer_queue {VK_NULL_HANDLE}
         {
         }
     };
@@ -106,6 +114,18 @@ namespace vkf {
         return _p->command_pool;
     }
 
+    VkQueue VulkanDevice::GetComputeQueue() const {
+        return _p->compute_queue;
+    }
+
+    VkQueue VulkanDevice::GetGraphicsQueue() const {
+        return _p->graphics_queue;
+    }
+
+    VkQueue VulkanDevice::GetTransferQueue() const {
+        return _p->transfer_queue;
+    }
+
     bool VulkanDevice::FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties, uint32_t* memoryType) const {
         assert(memoryType != nullptr);
 
@@ -126,7 +146,7 @@ namespace vkf {
     bool VulkanDevice::GetQueueFamilyIndex(VkQueueFlagBits queue_flags, uint32_t* queue_index) const {
         assert(queue_index != nullptr);
 
-        uint32_t queue_props_count = static_cast<uint32_t>(_p->queue_family_properties.size());
+        uint32_t queue_props_count {static_cast<uint32_t>(_p->queue_family_properties.size())};
 
         if ((queue_flags & VK_QUEUE_COMPUTE_BIT) != 0u) {
             for (uint32_t i = 0u; i < queue_props_count; ++i) {
@@ -160,7 +180,31 @@ namespace vkf {
             }
         }
 
-        *queue_index = static_cast<uint32_t>(VK_NULL_HANDLE);
+        *queue_index = UINT32_MAX;
+        return false;
+    }
+
+    std::vector<VkQueueFamilyProperties> VulkanDevice::GetQueueFamilyProperties() const {
+        return _p->queue_family_properties;
+    }
+
+    bool VulkanDevice::GetPresentationQueueFamilyIndex(VkSurfaceKHR surface, uint32_t* queue_index) const {
+        assert(surface != VK_NULL_HANDLE);
+        assert(queue_index != nullptr);
+
+        for (uint32_t i = 0u; i < static_cast<uint32_t>(_p->queue_family_properties.size()); ++i) {
+            if ((_p->queue_family_properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0u)
+                continue;
+
+            VkBool32 present_support = VK_FALSE;
+            vkGetPhysicalDeviceSurfaceSupportKHR(_p->physical_device, i, surface, &present_support);
+            if (present_support == VK_TRUE) {
+                *queue_index = i;
+                return true;
+            }
+        }
+
+        *queue_index = 0u;
         return false;
     }
 
@@ -170,59 +214,75 @@ namespace vkf {
     }
 
     VkResult VulkanDevice::InitLogicalDevice(VkQueueFlags queue_types) {
-        return InitLogicalDevice(_p->features, {}, nullptr, true, queue_types);
+        return InitLogicalDevice(_p->features, {}, queue_types, VK_NULL_HANDLE, nullptr);
+    }
+
+    VkResult VulkanDevice::InitLogicalDevice(VkQueueFlags queue_types, VkSurfaceKHR target_surface) {
+        return InitLogicalDevice(_p->features, {}, queue_types, target_surface, nullptr);
     }
 
     VkResult VulkanDevice::InitLogicalDevice(
         VkPhysicalDeviceFeatures enabled_features,
         std::vector<const char*> enabled_extensions,
-        void* next_chain,
-        bool use_swapchain,
-        VkQueueFlags queue_types
+        VkQueueFlags queue_types,
+        VkSurfaceKHR target_surface,
+        void* next_chain
     ) {
         const float default_queue_priority {1.0f};
 
+        std::vector<const char*> device_extensions(enabled_extensions);
+        if (target_surface != VK_NULL_HANDLE)
+            device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+        uint32_t compute_queue_index {UINT32_MAX};
+        uint32_t graphics_queue_index {UINT32_MAX};
+        uint32_t transfer_queue_index {UINT32_MAX};
         std::vector<VkDeviceQueueCreateInfo> queue_create_infos {};
 
-        if ((queue_types & VK_QUEUE_GRAPHICS_BIT) != 0u
-            && GetQueueFamilyIndex(VK_QUEUE_GRAPHICS_BIT, &_p->queue_family_indices.graphics)
-        ) {
+        bool have_graphics_queue {false};
+
+        if ((queue_types & VK_QUEUE_GRAPHICS_BIT) != 0u) {
+            have_graphics_queue = (target_surface != VK_NULL_HANDLE)
+                ? GetPresentationQueueFamilyIndex(target_surface, &graphics_queue_index)
+                : GetQueueFamilyIndex(VK_QUEUE_GRAPHICS_BIT, &graphics_queue_index);
+        }
+
+        // It's important to get the graphics queue first, if requested
+        if (have_graphics_queue) {
             VkDeviceQueueCreateInfo queue_create_info {};
             queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            queue_create_info.queueFamilyIndex = _p->queue_family_indices.graphics;
+            queue_create_info.queueFamilyIndex = graphics_queue_index;
             queue_create_info.queueCount = 1u;
             queue_create_info.pQueuePriorities = &default_queue_priority;
             queue_create_infos.push_back(queue_create_info);
         }
 
         if ((queue_types & VK_QUEUE_COMPUTE_BIT) != 0u
-            && GetQueueFamilyIndex(VK_QUEUE_COMPUTE_BIT, &_p->queue_family_indices.compute)
-            && _p->queue_family_indices.compute != _p->queue_family_indices.graphics
+            && GetQueueFamilyIndex(VK_QUEUE_COMPUTE_BIT, &compute_queue_index)
+            && compute_queue_index != graphics_queue_index
         ) {
             VkDeviceQueueCreateInfo queue_create_info {};
             queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            queue_create_info.queueFamilyIndex = _p->queue_family_indices.compute;
+            queue_create_info.queueFamilyIndex = compute_queue_index;
             queue_create_info.queueCount = 1u;
             queue_create_info.pQueuePriorities = &default_queue_priority;
             queue_create_infos.push_back(queue_create_info);
         }
 
         if ((queue_types & VK_QUEUE_TRANSFER_BIT) != 0u
-            && GetQueueFamilyIndex(VK_QUEUE_TRANSFER_BIT, &_p->queue_family_indices.transfer)
-            && _p->queue_family_indices.transfer != _p->queue_family_indices.compute
-            && _p->queue_family_indices.transfer != _p->queue_family_indices.graphics
+            && GetQueueFamilyIndex(VK_QUEUE_TRANSFER_BIT, &transfer_queue_index)
+            && transfer_queue_index != compute_queue_index
+            && transfer_queue_index != graphics_queue_index
         ) {
             VkDeviceQueueCreateInfo queue_create_info {};
             queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            queue_create_info.queueFamilyIndex = _p->queue_family_indices.transfer;
+            queue_create_info.queueFamilyIndex = transfer_queue_index;
             queue_create_info.queueCount = 1u;
             queue_create_info.pQueuePriorities = &default_queue_priority;
             queue_create_infos.push_back(queue_create_info);
         }
 
-        std::vector<const char*> device_extensions(enabled_extensions);
-        if (use_swapchain)
-            device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        std::cout << "queues: " << queue_create_infos.size() << std::endl;
 
         VkDeviceCreateInfo device_create_info {};
         device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -239,22 +299,45 @@ namespace vkf {
             device_create_info.pNext = &physical_device_features_2;
         }
 
-        if (IsExtensionSupported(VK_EXT_DEBUG_MARKER_EXTENSION_NAME)) {
+        bool enable_debug_markers {IsExtensionSupported(VK_EXT_DEBUG_MARKER_EXTENSION_NAME)};
+        if (enable_debug_markers)
             device_extensions.push_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
-            _p->enable_debug_markers = true;
-        }
 
         if (device_extensions.size() > 0u) {
             device_create_info.enabledExtensionCount = static_cast<uint32_t>(device_extensions.size());
             device_create_info.ppEnabledExtensionNames = device_extensions.data();
         }
 
-        VkResult result = vkCreateDevice(_p->physical_device, &device_create_info, nullptr, &_p->logical_device);
+        VkDevice device;
+        VkResult result = vkCreateDevice(_p->physical_device, &device_create_info, nullptr, &device);
         if (result != VK_SUCCESS)
             return result;
 
+        _p->logical_device = device;
+
+        if (have_graphics_queue) {
+            VkCommandPool command_pool;
+            result = CreateCommandPool(graphics_queue_index, &command_pool);
+            if (result != VK_SUCCESS) {
+                vkDestroyDevice(device, nullptr);
+                _p->logical_device = VK_NULL_HANDLE;
+                return result;
+            }
+            _p->command_pool = command_pool;
+        }
+
+        _p->enable_debug_markers = enable_debug_markers;
         _p->enabled_features = enabled_features;
-        _p->command_pool = CreateCommandPool(_p->queue_family_indices.graphics);
+        _p->queue_family_indices.compute = compute_queue_index;
+        _p->queue_family_indices.graphics = graphics_queue_index;
+        _p->queue_family_indices.transfer = transfer_queue_index;
+
+        if (compute_queue_index != UINT32_MAX)
+            vkGetDeviceQueue(device, compute_queue_index, 0u, &_p->compute_queue);
+        if (graphics_queue_index != UINT32_MAX)
+            vkGetDeviceQueue(device, graphics_queue_index, 0u, &_p->graphics_queue);
+        if (transfer_queue_index != UINT32_MAX)
+            vkGetDeviceQueue(device, transfer_queue_index, 0u, &_p->transfer_queue);
 
         return VK_SUCCESS;
     }
@@ -274,7 +357,6 @@ namespace vkf {
         *memory = VK_NULL_HANDLE;
 
         VkResult result = VK_SUCCESS;
-
         VkBuffer result_buffer = VK_NULL_HANDLE;
         VkDeviceMemory result_memory = VK_NULL_HANDLE;
 
@@ -356,14 +438,25 @@ namespace vkf {
         return result;
     }
 
-    VkCommandPool VulkanDevice::CreateCommandPool(uint32_t queue_family_index, VkCommandPoolCreateFlags flags) const {
+    VkResult VulkanDevice::CreateCommandPool(uint32_t queue_family_index, VkCommandPool* command_pool) const {
+        return CreateCommandPool(queue_family_index, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, command_pool);
+    }
+
+    VkResult VulkanDevice::CreateCommandPool(
+        uint32_t queue_family_index,
+        VkCommandPoolCreateFlags flags,
+        VkCommandPool* command_pool
+    ) const {
+        assert(command_pool != nullptr);
+
         VkCommandPoolCreateInfo create_info {};
         create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         create_info.queueFamilyIndex = queue_family_index;
         create_info.flags = flags;
 
-        VkCommandPool result;
-        VK_CHECK_RESULT(vkCreateCommandPool(_p->logical_device, &create_info, nullptr, &result));
+        VkCommandPool result_command_pool = VK_NULL_HANDLE;
+        VkResult result = vkCreateCommandPool(_p->logical_device, &create_info, nullptr, &result_command_pool);
+        *command_pool = result_command_pool;
         return result;
     }
 

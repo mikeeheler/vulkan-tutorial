@@ -77,9 +77,6 @@ namespace vulkan_tutorial {
         const std::vector<const char*> _instanceExtensions;
         const std::vector<const char*> _validationLayers;
 
-        VkQueue _graphicsQueue;
-        VkQueue _presentQueue;
-
         VkDebugUtilsMessengerEXT _debugMessenger;
         VkSampleCountFlagBits _msaaSamples;
 

@@ -13,24 +13,32 @@ namespace vkf {
         ~VulkanDevice();
 
         VkPhysicalDevice GetPhysicalDevice() const;
+        VkDevice GetLogicalDevice() const;
+
         VkPhysicalDeviceFeatures GetFeatures() const;
         VkPhysicalDeviceFeatures GetEnabledFeatures() const;
         VkPhysicalDeviceProperties GetProperties() const;
         VkPhysicalDeviceMemoryProperties GetMemoryProperties() const;
-        VkDevice GetLogicalDevice() const;
+
         VkCommandPool GetDefaultCommandPool() const;
+        VkQueue GetComputeQueue() const;
+        VkQueue GetGraphicsQueue() const;
+        VkQueue GetTransferQueue() const;
 
         bool FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties, uint32_t* memoryType) const;
         bool GetQueueFamilyIndex(VkQueueFlagBits queue_flags, uint32_t* queue_index) const;
+        std::vector<VkQueueFamilyProperties> GetQueueFamilyProperties() const;
+        bool GetPresentationQueueFamilyIndex(VkSurfaceKHR surface, uint32_t* queue_index) const;
         bool IsExtensionSupported(const char* extension_name) const;
 
         VkResult InitLogicalDevice(VkQueueFlags queue_types);
+        VkResult InitLogicalDevice(VkQueueFlags queue_flags, VkSurfaceKHR target_surface);
         VkResult InitLogicalDevice(
             VkPhysicalDeviceFeatures enabled_features,
             std::vector<const char*> enabled_extensions,
-            void* next_chain = nullptr,
-            bool use_swapchain = true,
-            VkQueueFlags queue_types = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT
+            VkQueueFlags queue_types,
+            VkSurfaceKHR target_surface,
+            void* next_chain
         );
 
         VkResult CreateBuffer(
@@ -42,9 +50,11 @@ namespace vkf {
             void* data = nullptr
         ) const;
         VkCommandBuffer CreateCommandBuffer(VkCommandBufferLevel level, bool begin = false) const;
-        VkCommandPool CreateCommandPool(
+        VkResult CreateCommandPool(uint32_t queue_family_index, VkCommandPool* command_pool) const;
+        VkResult CreateCommandPool(
             uint32_t queue_family_index,
-            VkCommandPoolCreateFlags flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
+            VkCommandPoolCreateFlags flags,
+            VkCommandPool* command_pool
         ) const;
         void FlushCommandBuffer(VkCommandBuffer command_buffer, VkQueue queue, bool free = true) const;
         void WaitIdle() const;

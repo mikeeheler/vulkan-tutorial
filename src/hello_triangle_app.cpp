@@ -70,6 +70,26 @@ namespace {
         func(instance, debugMessenger, pAllocator);
     }
 
+    void DumpQueueFamilyProperties(VkQueueFamilyProperties properties, const char* indent = "") {
+        std::cout << indent << "queueCount: " << properties.queueCount << std::endl;
+        std::cout << indent << "minImageTransferGranularity: {"
+            << properties.minImageTransferGranularity.width << ", "
+            << properties.minImageTransferGranularity.height << ", "
+            << properties.minImageTransferGranularity.depth << "}" << std::endl;
+
+        #define DUMP_QUEUE_FLAG(x) if ((properties.queueFlags & VK_QUEUE_##x##_BIT) != 0u) \
+            std::cout << indent << "  " << "VK_QUEUE_" #x "_BIT" << std::endl
+
+        std::cout << indent << "queueFlags: " << std::endl;
+        DUMP_QUEUE_FLAG(GRAPHICS);
+        DUMP_QUEUE_FLAG(COMPUTE);
+        DUMP_QUEUE_FLAG(TRANSFER);
+        DUMP_QUEUE_FLAG(SPARSE_BINDING);
+        DUMP_QUEUE_FLAG(PROTECTED);
+
+        #undef DUMP_QUEUE_FLAG
+    }
+
     const char* getPresentModeName(VkPresentModeKHR presentMode) {
         #define PRESENT_CASE(x) case VK_PRESENT_MODE_ ## x ## _KHR: return "VK_PRESENT_MODE_" #x "_KHR"
         switch (presentMode) {
@@ -131,6 +151,10 @@ namespace {
 namespace vulkan_tutorial {
     struct hello_triangle_app::Impl {
         std::unique_ptr<vkf::VulkanDevice> device;
+
+        VkQueue compute_queue;
+        VkQueue graphics_queue;
+        VkQueue transfer_queue;
     };
 
     std::array<VkVertexInputAttributeDescription, 3> vertex::getAttributeDescriptions() {
@@ -180,7 +204,6 @@ namespace vulkan_tutorial {
         _framebufferResized {false},
         _fullscreenToggleRequested {false},
         _graphicsPipeline {VK_NULL_HANDLE},
-        _graphicsQueue {VK_NULL_HANDLE},
         _imageAvailableSemaphores {},
         _indexBuffer {VK_NULL_HANDLE},
         _indexBufferMemory {VK_NULL_HANDLE},
@@ -197,7 +220,6 @@ namespace vulkan_tutorial {
         _mipLevels {1u},
         _msaaSamples {VK_SAMPLE_COUNT_1_BIT},
         _pipelineLayout {VK_NULL_HANDLE},
-        _presentQueue {VK_NULL_HANDLE},
         _renderFinishedSemaphores {},
         _renderPass {VK_NULL_HANDLE},
         _surface {VK_NULL_HANDLE},
@@ -394,7 +416,6 @@ namespace vulkan_tutorial {
         _indexBufferMemory = VK_NULL_HANDLE;
         _inFlightFences.clear();
         _instance = VK_NULL_HANDLE;
-        _graphicsQueue = VK_NULL_HANDLE;
         _mipLevels = 1u;
         _msaaSamples = VK_SAMPLE_COUNT_1_BIT;
         _renderFinishedSemaphores.clear();
@@ -1054,14 +1075,27 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::createLogicalDevice() {
-        VK_CHECK_RESULT(_p->device->InitLogicalDevice(VK_QUEUE_GRAPHICS_BIT));
+        VkQueueFlags required_queues = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
+        VK_CHECK_RESULT(_p->device->InitLogicalDevice(required_queues, _surface));
 
-        uint32_t graphics_queue_index;
-        if (!_p->device->GetQueueFamilyIndex(VK_QUEUE_GRAPHICS_BIT, &graphics_queue_index))
-            throw std::runtime_error("no graphics queue present");
+        uint32_t compute_queue_index;
+        if (_p->device->GetQueueFamilyIndex(VK_QUEUE_COMPUTE_BIT, &compute_queue_index)) {
+            std::cout << "compute queue: " << compute_queue_index << std::endl;
+        }
 
-        vkGetDeviceQueue(*_p->device, graphics_queue_index, 0u, &_graphicsQueue);
-        vkGetDeviceQueue(*_p->device, graphics_queue_index, 0u, &_presentQueue);
+        uint32_t graphics_queue_index, transfer_queue_index;
+        if (!_p->device->GetQueueFamilyIndex(VK_QUEUE_GRAPHICS_BIT, &graphics_queue_index)
+            || !_p->device->GetQueueFamilyIndex(VK_QUEUE_TRANSFER_BIT, &transfer_queue_index)
+        ) {
+            throw std::runtime_error("no graphics queue found");
+        }
+
+        std::cout << "graphics queue: " << graphics_queue_index << std::endl;
+        std::cout << "transfer queue: " << transfer_queue_index << std::endl;
+
+        _p->compute_queue = _p->device->GetComputeQueue();
+        _p->graphics_queue = _p->device->GetGraphicsQueue();
+        _p->transfer_queue = _p->device->GetTransferQueue();
     }
 
     void hello_triangle_app::createRenderPass() {
@@ -1407,7 +1441,7 @@ namespace vulkan_tutorial {
 
         vkResetFences(*_p->device, 1u, &_inFlightFences[_currentFrame]);
 
-        result = vkQueueSubmit(_graphicsQueue, 1u, &submitInfo, _inFlightFences[_currentFrame]);
+        result = vkQueueSubmit(_p->graphics_queue, 1u, &submitInfo, _inFlightFences[_currentFrame]);
         if (result != VK_SUCCESS)
             throw std::runtime_error("failed to submit draw command buffer");
 
@@ -1422,7 +1456,7 @@ namespace vulkan_tutorial {
         presentInfo.pImageIndices = &imageIndex;
         presentInfo.pResults = nullptr;
 
-        result = vkQueuePresentKHR(_presentQueue, &presentInfo);
+        result = vkQueuePresentKHR(_p->graphics_queue, &presentInfo);
         if (result == VK_ERROR_OUT_OF_DATE_KHR
             || result == VK_SUBOPTIMAL_KHR
             || _framebufferResized
@@ -1434,13 +1468,13 @@ namespace vulkan_tutorial {
             throw std::runtime_error("failed to present swap chain image");
         }
 
-        vkQueueWaitIdle(_presentQueue);
+        vkQueueWaitIdle(_p->graphics_queue);
 
         _currentFrame = (_currentFrame + 1u) % MAX_FRAMES_IN_FLIGHT;
     }
 
     void hello_triangle_app::endSingleTimeCommands(VkCommandBuffer commandBuffer) {
-        _p->device->FlushCommandBuffer(commandBuffer, _graphicsQueue);
+        _p->device->FlushCommandBuffer(commandBuffer, _p->graphics_queue);
     }
 
     VkFormat hello_triangle_app::findDepthFormat() const {
@@ -1863,6 +1897,16 @@ namespace vulkan_tutorial {
         vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queue_family_count, nullptr);
         std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
         vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queue_family_count, queue_families.data());
+
+        std::cout << "queue families:" << std::endl;
+        for (uint32_t i = 0; i < queue_family_count; ++i) {
+            std::cout << "  queue family #" << i << ':' << std::endl;
+            DumpQueueFamilyProperties(queue_families[i], "    ");
+
+            VkBool32 present_support = VK_FALSE;
+            vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, _surface, &present_support);
+            std::cout << "    presentSupport: " << (present_support == VK_TRUE ? "TRUE" : "FALSE") << std::endl;
+        }
 
         for (uint32_t i = 0; i < queue_family_count; ++i) {
             const auto& queue_family = queue_families[i];
