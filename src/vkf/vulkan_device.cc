@@ -16,7 +16,6 @@ namespace vkf {
         VkPhysicalDeviceFeatures enabled_features;
         VkPhysicalDeviceMemoryProperties memory_properties;
         std::vector<std::string> supported_extensions;
-        VkCommandPool command_pool;
 
         bool enable_debug_markers;
 
@@ -39,7 +38,6 @@ namespace vkf {
               enabled_features {},
               memory_properties {},
               supported_extensions {},
-              command_pool {VK_NULL_HANDLE},
               enable_debug_markers {false},
               queue_family_properties {},
               queue_family_indices {UINT32_MAX, UINT32_MAX, UINT32_MAX},
@@ -82,9 +80,6 @@ namespace vkf {
     }
 
     VulkanDevice::~VulkanDevice() {
-        if (_p->command_pool != VK_NULL_HANDLE)
-            vkDestroyCommandPool(_p->logical_device, _p->command_pool, nullptr);
-
         if (_p->logical_device != VK_NULL_HANDLE)
             vkDestroyDevice(_p->logical_device, nullptr);
     }
@@ -108,10 +103,6 @@ namespace vkf {
 
     VkDevice VulkanDevice::GetLogicalDevice() const {
         return _p->logical_device;
-    }
-
-    VkCommandPool VulkanDevice::GetDefaultCommandPool() const {
-        return _p->command_pool;
     }
 
     VkQueue VulkanDevice::GetComputeQueue() const {
@@ -314,18 +305,6 @@ namespace vkf {
             return result;
 
         _p->logical_device = device;
-
-        if (have_graphics_queue) {
-            VkCommandPool command_pool;
-            result = CreateCommandPool(graphics_queue_index, &command_pool);
-            if (result != VK_SUCCESS) {
-                vkDestroyDevice(device, nullptr);
-                _p->logical_device = VK_NULL_HANDLE;
-                return result;
-            }
-            _p->command_pool = command_pool;
-        }
-
         _p->enable_debug_markers = enable_debug_markers;
         _p->enabled_features = enabled_features;
         _p->queue_family_indices.compute = compute_queue_index;
@@ -425,15 +404,10 @@ namespace vkf {
         return result;
     }
 
-    VkCommandBuffer VulkanDevice::CreateCommandBuffer(VkCommandBufferLevel level, bool begin) const {
-        VkCommandBufferAllocateInfo alloc_info = initializers::CommandBufferAllocateInfo(_p->command_pool, level, 1);
+    VkCommandBuffer VulkanDevice::CreateCommandBuffer(VkCommandPool command_pool, VkCommandBufferLevel level) const {
+        VkCommandBufferAllocateInfo alloc_info = initializers::CommandBufferAllocateInfo(command_pool, level, 1);
         VkCommandBuffer result;
         VK_CHECK_RESULT(vkAllocateCommandBuffers(_p->logical_device, &alloc_info, &result));
-
-        if (begin) {
-            auto begin_info = initializers::CommandBufferBeginInfo();
-            VK_CHECK_RESULT(vkBeginCommandBuffer(result, &begin_info));
-        }
 
         return result;
     }
@@ -460,7 +434,7 @@ namespace vkf {
         return result;
     }
 
-    void VulkanDevice::FlushCommandBuffer(VkCommandBuffer command_buffer, VkQueue queue, bool free) const {
+    void VulkanDevice::FlushCommandBuffer(VkCommandBuffer command_buffer, VkQueue queue) const {
         if (command_buffer == VK_NULL_HANDLE)
             return;
 
@@ -478,9 +452,6 @@ namespace vkf {
         VK_CHECK_RESULT(vkWaitForFences(_p->logical_device, 1u, &fence, VK_TRUE, DEFAULT_FENCE_TIMEOUT));
 
         vkDestroyFence(_p->logical_device, fence, nullptr);
-
-        if (free)
-            vkFreeCommandBuffers(_p->logical_device, _p->command_pool, 1u, &command_buffer);
     }
 
     void VulkanDevice::WaitIdle() const {

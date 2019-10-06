@@ -152,9 +152,17 @@ namespace vulkan_tutorial {
     struct hello_triangle_app::Impl {
         std::unique_ptr<vkf::VulkanDevice> device;
 
-        VkQueue compute_queue;
-        VkQueue graphics_queue;
-        VkQueue transfer_queue;
+        uint32_t compute_queue_index {UINT32_MAX};
+        uint32_t graphics_queue_index {UINT32_MAX};
+        uint32_t transfer_queue_index {UINT32_MAX};
+
+        VkQueue compute_queue {VK_NULL_HANDLE};
+        VkQueue graphics_queue {VK_NULL_HANDLE};
+        VkQueue transfer_queue {VK_NULL_HANDLE};
+
+        VkCommandPool compute_command_pool {VK_NULL_HANDLE};
+        VkCommandPool graphics_command_pool {VK_NULL_HANDLE};
+        VkCommandPool transfer_command_pool {VK_NULL_HANDLE};
     };
 
     std::array<VkVertexInputAttributeDescription, 3> vertex::getAttributeDescriptions() {
@@ -259,7 +267,9 @@ namespace vulkan_tutorial {
     }
 
     VkCommandBuffer hello_triangle_app::beginSingleTimeCommands() {
-        VkCommandBuffer commandBuffer = _p->device->CreateCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+        VkCommandBuffer commandBuffer = _p->device->CreateCommandBuffer(
+            _p->graphics_command_pool,
+            VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
         VkCommandBufferBeginInfo beginInfo = vkf::initializers::CommandBufferBeginInfo();
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -400,6 +410,17 @@ namespace vulkan_tutorial {
             vkDestroySemaphore(device, _renderFinishedSemaphores[i], nullptr);
             vkDestroyFence(device, _inFlightFences[i], nullptr);
         }
+        if (_p->compute_command_pool != _p->graphics_command_pool
+            && _p->compute_command_pool != VK_NULL_HANDLE
+        ) {
+            vkDestroyCommandPool(device, _p->compute_command_pool, nullptr);
+        }
+        if (_p->transfer_command_pool != _p->graphics_command_pool
+            && _p->transfer_command_pool != VK_NULL_HANDLE
+        ) {
+            vkDestroyCommandPool(device, _p->transfer_command_pool, nullptr);
+        }
+        vkDestroyCommandPool(device, _p->graphics_command_pool, nullptr);
         _p->device.reset(nullptr);
 #if ENABLE_VALIDATION_LAYERS
         DestroyDebugUtilsMessengerEXT(_instance, _debugMessenger, nullptr);
@@ -408,6 +429,17 @@ namespace vulkan_tutorial {
         vkDestroyInstance(_instance, nullptr);
         _window.destroy();
         glfwTerminate();
+
+        _p->device.reset(nullptr);
+        _p->compute_command_pool = VK_NULL_HANDLE;
+        _p->compute_queue = VK_NULL_HANDLE;
+        _p->compute_queue_index = UINT32_MAX;
+        _p->graphics_command_pool = VK_NULL_HANDLE;
+        _p->graphics_queue = VK_NULL_HANDLE;
+        _p->graphics_queue_index = UINT32_MAX;
+        _p->transfer_command_pool = VK_NULL_HANDLE;
+        _p->transfer_queue = VK_NULL_HANDLE;
+        _p->transfer_queue_index = UINT32_MAX;
 
         _debugMessenger = VK_NULL_HANDLE;
         _descriptorSetLayout = VK_NULL_HANDLE;
@@ -443,7 +475,7 @@ namespace vulkan_tutorial {
         }
         vkFreeCommandBuffers(
             device,
-            _p->device->GetDefaultCommandPool(),
+            _p->graphics_command_pool,
             static_cast<uint32_t>(_commandBuffers.size()),
             _commandBuffers.data()
         );
@@ -570,7 +602,9 @@ namespace vulkan_tutorial {
         _commandBuffers.resize(_swapchainFramebuffers.size());
 
         for (size_t i = 0; i < _commandBuffers.size(); ++i) {
-            auto commandBuffer = _p->device->CreateCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+            auto commandBuffer = _p->device->CreateCommandBuffer(
+                _p->graphics_command_pool,
+                VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
             VkCommandBufferBeginInfo beginInfo = {};
             beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -612,6 +646,27 @@ namespace vulkan_tutorial {
                 throw std::runtime_error("failed to record command buffer");
 
             _commandBuffers[i] = commandBuffer;
+        }
+    }
+
+    void hello_triangle_app::createCommandPools() {
+        VK_CHECK_RESULT(_p->device->CreateCommandPool(_p->graphics_queue_index, &_p->graphics_command_pool));
+
+        if (_p->compute_queue_index == _p->graphics_queue_index) {
+            _p->compute_command_pool = _p->graphics_command_pool;
+        }
+        else if (_p->compute_queue != VK_NULL_HANDLE) {
+            VK_CHECK_RESULT(_p->device->CreateCommandPool(_p->compute_queue_index, &_p->compute_command_pool));
+        }
+
+        if (_p->transfer_queue_index == _p->graphics_queue_index) {
+            _p->transfer_command_pool = _p->graphics_command_pool;
+        }
+        else if (_p->transfer_queue_index == _p->compute_queue_index) {
+            _p->transfer_command_pool = _p->graphics_command_pool;
+        }
+        else if (_p->transfer_queue != VK_NULL_HANDLE) {
+            VK_CHECK_RESULT(_p->device->CreateCommandPool(_p->transfer_queue_index, &_p->transfer_command_pool));
         }
     }
 
@@ -1093,6 +1148,10 @@ namespace vulkan_tutorial {
         std::cout << "graphics queue: " << graphics_queue_index << std::endl;
         std::cout << "transfer queue: " << transfer_queue_index << std::endl;
 
+        _p->compute_queue_index = compute_queue_index;
+        _p->graphics_queue_index = graphics_queue_index;
+        _p->transfer_queue_index = transfer_queue_index;
+
         _p->compute_queue = _p->device->GetComputeQueue();
         _p->graphics_queue = _p->device->GetGraphicsQueue();
         _p->transfer_queue = _p->device->GetTransferQueue();
@@ -1475,6 +1534,7 @@ namespace vulkan_tutorial {
 
     void hello_triangle_app::endSingleTimeCommands(VkCommandBuffer commandBuffer) {
         _p->device->FlushCommandBuffer(commandBuffer, _p->graphics_queue);
+        vkFreeCommandBuffers(*_p->device, _p->graphics_command_pool, 1u, &commandBuffer);
     }
 
     VkFormat hello_triangle_app::findDepthFormat() const {
@@ -1695,6 +1755,7 @@ namespace vulkan_tutorial {
         createSurface();
         pickPhysicalDevice();
         createLogicalDevice();
+        createCommandPools();
         createSwapchain();
         createImageViews();
         createRenderPass();

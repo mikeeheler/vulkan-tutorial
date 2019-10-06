@@ -20,7 +20,6 @@ namespace vkf {
         VkPhysicalDeviceProperties GetProperties() const;
         VkPhysicalDeviceMemoryProperties GetMemoryProperties() const;
 
-        VkCommandPool GetDefaultCommandPool() const;
         VkQueue GetComputeQueue() const;
         VkQueue GetGraphicsQueue() const;
         VkQueue GetTransferQueue() const;
@@ -49,14 +48,15 @@ namespace vkf {
             VkDeviceMemory* memory,
             void* data = nullptr
         ) const;
-        VkCommandBuffer CreateCommandBuffer(VkCommandBufferLevel level, bool begin = false) const;
         VkResult CreateCommandPool(uint32_t queue_family_index, VkCommandPool* command_pool) const;
         VkResult CreateCommandPool(
             uint32_t queue_family_index,
             VkCommandPoolCreateFlags flags,
             VkCommandPool* command_pool
         ) const;
-        void FlushCommandBuffer(VkCommandBuffer command_buffer, VkQueue queue, bool free = true) const;
+
+        VkCommandBuffer CreateCommandBuffer(VkCommandPool command_pool, VkCommandBufferLevel level) const;
+        void FlushCommandBuffer(VkCommandBuffer command_buffer, VkQueue queue) const;
         void WaitIdle() const;
 
         operator VkDevice();

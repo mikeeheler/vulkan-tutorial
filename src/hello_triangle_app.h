@@ -153,6 +153,7 @@ namespace vulkan_tutorial {
         );
         void createColorResources();
         void createCommandBuffers();
+        void createCommandPools();
         void createDepthResources();
         void createDescriptorPool();
         void createDescriptorSetLayout();
