@@ -331,7 +331,7 @@ namespace vulkan_tutorial {
         }
 
         int width, height;
-        glfwGetFramebufferSize(const_cast<GLFWwindow*>(_window.get()), &width, &height);
+        glfwGetFramebufferSize((GLFWwindow*)_window.get(), &width, &height);
 
         VkExtent2D actualExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 
@@ -1269,7 +1269,7 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::createSurface() {
-        VK_CHECK_RESULT(glfwCreateWindowSurface(_instance, _window.get(), nullptr, &_surface));
+        VK_CHECK_RESULT(glfwCreateWindowSurface(_instance, _window, nullptr, &_surface));
     }
 
     void hello_triangle_app::createSwapchain() {
@@ -1786,8 +1786,8 @@ namespace vulkan_tutorial {
 
         _window = scoped_glfw_window();
         _window.init(INITIAL_WIDTH, INITIAL_HEIGHT, "Vulkan Test");
-        glfwSetWindowUserPointer(_window.get(), this);
-        glfwSetFramebufferSizeCallback(_window.get(), framebufferResizeCallback);
+        glfwSetWindowUserPointer(_window, this);
+        glfwSetFramebufferSizeCallback(_window, framebufferResizeCallback);
     }
 
     bool hello_triangle_app::isFullscreen() const {
@@ -1835,7 +1835,7 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::mainLoop() {
-        while (glfwWindowShouldClose(_window.get()) == GLFW_FALSE) {
+        while (glfwWindowShouldClose(_window) == GLFW_FALSE) {
             glfwPollEvents();
             drawFrame();
         }
@@ -1991,7 +1991,7 @@ namespace vulkan_tutorial {
     void hello_triangle_app::recreateSwapchain() {
         int width = 0, height = 0;
         while (width == 0 || height == 0) {
-            glfwGetFramebufferSize(_window.get(), &width, &height);
+            glfwGetFramebufferSize(_window, &width, &height);
             glfwWaitEvents();
         }
 

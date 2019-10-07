@@ -19,7 +19,7 @@ namespace vulkan_tutorial {
         operator GLFWwindow*() { return _window; }
 
     private:
-        bool _owned;
         GLFWwindow* _window;
+        bool _owned;
     };
 }
