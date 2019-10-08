@@ -108,22 +108,14 @@ namespace vulkan_tutorial {
         VkDeviceMemory _depthImageMemory;
         VkImageView _depthImageView;
 
-        std::vector<uint32_t> _indices;
-        VkBuffer _indexBuffer;
-        VkDeviceMemory _indexBufferMemory;
-
         uint32_t _mipLevels;
         VkImage _textureImage;
         VkDeviceMemory _textureImageMemory;
         VkImageView _textureImageView;
         VkSampler _textureSampler;
 
+        std::vector<uint32_t> _indices;
         std::vector<vertex> _vertices;
-        VkBuffer _vertexBuffer;
-        VkDeviceMemory _vertexBufferMemory;
-
-        std::vector<VkBuffer> _uniformBuffers;
-        std::vector<VkDeviceMemory> _uniformBuffersMemory;
 
     private:
         static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -142,15 +134,8 @@ namespace vulkan_tutorial {
         VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) const;
         void cleanup();
         void cleanupSwapchain();
-        void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+        void copyBuffer(vkf::VulkanBuffer* src_buffer, vkf::VulkanBuffer* dst_buffer, VkDeviceSize size);
         void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
-        void createBuffer(
-            VkDeviceSize size,
-            VkBufferUsageFlags usage,
-            VkMemoryPropertyFlags properties,
-            VkBuffer& buffer,
-            VkDeviceMemory& bufferMemory
-        );
         void createColorResources();
         void createCommandBuffers();
         void createCommandPools();

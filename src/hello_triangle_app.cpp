@@ -1,6 +1,8 @@
 #include "hello_triangle_app.h"
 #include "scoped_glfw_window.h"
+#include "vkf/vulkan_buffer.h"
 #include "vkf/vulkan_device.h"
+#include "vkf/vulkan_image.h"
 #include "vkf/vulkan_initializers.h"
 
 #include <GLFW/glfw3.h>
@@ -163,6 +165,10 @@ namespace vulkan_tutorial {
         VkCommandPool compute_command_pool {VK_NULL_HANDLE};
         VkCommandPool graphics_command_pool {VK_NULL_HANDLE};
         VkCommandPool transfer_command_pool {VK_NULL_HANDLE};
+
+        std::unique_ptr<vkf::VulkanBuffer> index_buffer;
+        std::unique_ptr<vkf::VulkanBuffer> vertex_buffer;
+        std::vector<vkf::VulkanBuffer> uniform_buffers;
     };
 
     std::array<VkVertexInputAttributeDescription, 3> vertex::getAttributeDescriptions() {
@@ -213,8 +219,6 @@ namespace vulkan_tutorial {
         _fullscreenToggleRequested {false},
         _graphicsPipeline {VK_NULL_HANDLE},
         _imageAvailableSemaphores {},
-        _indexBuffer {VK_NULL_HANDLE},
-        _indexBufferMemory {VK_NULL_HANDLE},
         _indices {},
         _inFlightFences {},
         _instance {VK_NULL_HANDLE},
@@ -241,15 +245,11 @@ namespace vulkan_tutorial {
         _textureImageMemory {VK_NULL_HANDLE},
         _textureImageView {VK_NULL_HANDLE},
         _textureSampler {VK_NULL_HANDLE},
-        _uniformBuffers {},
-        _uniformBuffersMemory {},
         _validationLayers {
 #if ENABLE_VALIDATION_LAYERS
             "VK_LAYER_LUNARG_standard_validation"
 #endif
         },
-        _vertexBuffer {VK_NULL_HANDLE},
-        _vertexBufferMemory {VK_NULL_HANDLE},
         _vertices {},
         _window {}
     {}
@@ -401,10 +401,8 @@ namespace vulkan_tutorial {
         vkDestroyImage(device, _textureImage, nullptr);
         vkFreeMemory(device, _textureImageMemory, nullptr);
         vkDestroyDescriptorSetLayout(device, _descriptorSetLayout, nullptr);
-        vkDestroyBuffer(device, _indexBuffer, nullptr);
-        vkFreeMemory(device, _indexBufferMemory, nullptr);
-        vkDestroyBuffer(device, _vertexBuffer, nullptr);
-        vkFreeMemory(device, _vertexBufferMemory, nullptr);
+        _p->index_buffer.reset(nullptr);
+        _p->vertex_buffer.reset(nullptr);
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
             vkDestroySemaphore(device, _imageAvailableSemaphores[i], nullptr);
             vkDestroySemaphore(device, _renderFinishedSemaphores[i], nullptr);
@@ -444,8 +442,6 @@ namespace vulkan_tutorial {
         _debugMessenger = VK_NULL_HANDLE;
         _descriptorSetLayout = VK_NULL_HANDLE;
         _imageAvailableSemaphores.clear();
-        _indexBuffer = VK_NULL_HANDLE;
-        _indexBufferMemory = VK_NULL_HANDLE;
         _inFlightFences.clear();
         _instance = VK_NULL_HANDLE;
         _mipLevels = 1u;
@@ -456,8 +452,6 @@ namespace vulkan_tutorial {
         _textureImageMemory = VK_NULL_HANDLE;
         _textureImageView = VK_NULL_HANDLE;
         _textureSampler = VK_NULL_HANDLE;
-        _vertexBuffer = VK_NULL_HANDLE;
-        _vertexBufferMemory = VK_NULL_HANDLE;
         _window = scoped_glfw_window();
     }
 
@@ -486,10 +480,7 @@ namespace vulkan_tutorial {
             vkDestroyImageView(device, imageView, nullptr);
         }
         vkDestroySwapchainKHR(device, _swapchain, nullptr);
-        for (size_t i = 0; i < _swapchainImages.size(); ++i) {
-            vkDestroyBuffer(device, _uniformBuffers[i], nullptr);
-            vkFreeMemory(device, _uniformBuffersMemory[i], nullptr);
-        }
+        _p->uniform_buffers.clear();
         vkDestroyDescriptorPool(device, _descriptorPool, nullptr);
 
         _commandBuffers.clear();
@@ -502,18 +493,16 @@ namespace vulkan_tutorial {
         _swapchain = VK_NULL_HANDLE;
         _swapchainFramebuffers.clear();
         _swapchainImageViews.clear();
-        _uniformBuffers.clear();
-        _uniformBuffersMemory.clear();
     }
 
-    void hello_triangle_app::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+    void hello_triangle_app::copyBuffer(vkf::VulkanBuffer* src_buffer, vkf::VulkanBuffer* dst_buffer, VkDeviceSize size) {
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
         VkBufferCopy copyRegion = {};
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
         copyRegion.size = size;
-        vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1u, &copyRegion);
+        vkCmdCopyBuffer(commandBuffer, *src_buffer, *dst_buffer, 1u, &copyRegion);
 
         endSingleTimeCommands(commandBuffer);
     }
@@ -537,39 +526,6 @@ namespace vulkan_tutorial {
         vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1u, &region);
 
         endSingleTimeCommands(commandBuffer);
-    }
-
-    void hello_triangle_app::createBuffer(
-        VkDeviceSize size,
-        VkBufferUsageFlags usage,
-        VkMemoryPropertyFlags properties,
-        VkBuffer& buffer,
-        VkDeviceMemory& bufferMemory
-    ) {
-        VkBufferCreateInfo bufferInfo = {};
-        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferInfo.size = size;
-        bufferInfo.usage = usage;
-        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-        VkResult result = vkCreateBuffer(*_p->device, &bufferInfo, nullptr, &buffer);
-        if (result != VK_SUCCESS)
-            throw std::runtime_error("failed to create vertex buffer");
-
-        VkMemoryRequirements memRequirements;
-        vkGetBufferMemoryRequirements(*_p->device, buffer, &memRequirements);
-
-        VkMemoryAllocateInfo allocInfo = {};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = memRequirements.size;
-        if (!_p->device->FindMemoryType(memRequirements.memoryTypeBits, properties, &allocInfo.memoryTypeIndex))
-            throw std::runtime_error("unable to find compatible memory type");
-
-        result = vkAllocateMemory(*_p->device, &allocInfo, nullptr, &bufferMemory);
-        if (result != VK_SUCCESS)
-            throw std::runtime_error("failed to allocate vertex buffer memory");
-
-        vkBindBufferMemory(*_p->device, buffer, bufferMemory, 0);
     }
 
     void hello_triangle_app::createColorResources() {
@@ -628,12 +584,13 @@ namespace vulkan_tutorial {
             renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
             renderPassInfo.pClearValues = clearValues.data();
 
+            VkBuffer vertexBuffers[] = {*_p->vertex_buffer};
+            VkDeviceSize offsets[] = {0};
+
             vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipeline);
-            VkBuffer vertexBuffers[] = {_vertexBuffer};
-            VkDeviceSize offsets[] = {0};
             vkCmdBindVertexBuffers(commandBuffer, 0u, 1u, vertexBuffers, offsets);
-            vkCmdBindIndexBuffer(commandBuffer, _indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+            vkCmdBindIndexBuffer(commandBuffer, *_p->index_buffer, 0, VK_INDEX_TYPE_UINT32);
             vkCmdBindDescriptorSets(
                 commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineLayout,
                 0u, 1u, &_descriptorSets[i],
@@ -717,19 +674,19 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::createDescriptorSetLayout() {
-        VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
-        samplerLayoutBinding.binding = 1u;
-        samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        samplerLayoutBinding.descriptorCount = 1u;
-        samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        samplerLayoutBinding.pImmutableSamplers = nullptr;
-
         VkDescriptorSetLayoutBinding uboLayoutBinding = {};
         uboLayoutBinding.binding = 0u;
         uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         uboLayoutBinding.descriptorCount = 1u;
         uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
         uboLayoutBinding.pImmutableSamplers = nullptr;
+
+        VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
+        samplerLayoutBinding.binding = 1u;
+        samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerLayoutBinding.descriptorCount = 1u;
+        samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        samplerLayoutBinding.pImmutableSamplers = nullptr;
 
         std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
 
@@ -758,7 +715,7 @@ namespace vulkan_tutorial {
 
         for (size_t i = 0; i < _swapchainImages.size(); ++i) {
             VkDescriptorBufferInfo bufferInfo = {};
-            bufferInfo.buffer = _uniformBuffers[i];
+            bufferInfo.buffer = _p->uniform_buffers[i];
             bufferInfo.offset = 0;
             bufferInfo.range = sizeof(uniform_buffer_object);
 
@@ -1058,35 +1015,25 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::createIndexBuffer() {
-        VkDeviceSize bufferSize = sizeof(_indices[0]) * _indices.size();
+        VkDeviceSize buffer_size = sizeof(_indices[0]) * _indices.size();
 
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        createBuffer(
-            bufferSize,
+        vkf::VulkanBuffer staging_buffer(
+            _p->device.get(),
+            buffer_size,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer,
-            stagingBufferMemory
+            _indices.data()
         );
 
-        void* data;
-        vkMapMemory(*_p->device, stagingBufferMemory, 0, bufferSize, 0, &data);
-        memcpy(data, _indices.data(), static_cast<size_t>(bufferSize));
-        vkUnmapMemory(*_p->device, stagingBufferMemory);
-
-        createBuffer(
-            bufferSize,
+        _p->index_buffer.reset(new vkf::VulkanBuffer(
+            _p->device.get(),
+            buffer_size,
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            _indexBuffer,
-            _indexBufferMemory
-        );
+            nullptr
+        ));
 
-        copyBuffer(stagingBuffer, _indexBuffer, bufferSize);
-
-        vkDestroyBuffer(*_p->device, stagingBuffer, nullptr);
-        vkFreeMemory(*_p->device, stagingBufferMemory, nullptr);
+        copyBuffer(&staging_buffer, _p->index_buffer.get(), buffer_size);
     }
 
     void hello_triangle_app::createInstance() {
@@ -1279,8 +1226,8 @@ namespace vulkan_tutorial {
         VkPresentModeKHR presentMode = chooseSwapPresentMode(swapchainSupport.presentModes);
         VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapchainSupport.formats);
 
-        // uint32_t imageCount = swapchainSupport.capabilities.maxImageCount;
-        uint32_t imageCount = swapchainSupport.capabilities.minImageCount;
+        uint32_t imageCount = swapchainSupport.capabilities.maxImageCount;
+        // uint32_t imageCount = swapchainSupport.capabilities.minImageCount;
         if (swapchainSupport.capabilities.maxImageCount > 0u
             && imageCount > swapchainSupport.capabilities.maxImageCount
         ) {
@@ -1318,17 +1265,16 @@ namespace vulkan_tutorial {
     void hello_triangle_app::createUniformBuffers() {
         VkDeviceSize bufferSize = sizeof(uniform_buffer_object);
 
-        _uniformBuffers.resize(_swapchainImages.size());
-        _uniformBuffersMemory.resize(_swapchainImages.size());
+        _p->uniform_buffers.resize(_swapchainImages.size());
 
         for (size_t i = 0; i < _swapchainImages.size(); ++i) {
-            createBuffer(
+            _p->uniform_buffers[i] = std::move(vkf::VulkanBuffer(
+                _p->device.get(),
                 bufferSize,
                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                _uniformBuffers[i],
-                _uniformBuffersMemory[i]
-            );
+                nullptr
+            ));
         }
     }
 
@@ -1338,7 +1284,7 @@ namespace vulkan_tutorial {
         if (pixels == nullptr)
             throw std::runtime_error("failed to load texture image");
 
-        VkDeviceSize imageSize = texWidth * texHeight * 4;
+        VkDeviceSize image_size = texWidth * texHeight * 4;
         _mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1u;
 
         std::cout << "read " << TEXTURE_PATH << ": "
@@ -1346,19 +1292,13 @@ namespace vulkan_tutorial {
             << " (" << _mipLevels << " mips)"
             << std::endl;
 
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        createBuffer(
-            imageSize,
+        vkf::VulkanBuffer staging_buffer(
+            _p->device.get(),
+            image_size,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer,
-            stagingBufferMemory);
-
-        void* data;
-        vkMapMemory(*_p->device, stagingBufferMemory, 0, imageSize, 0, &data);
-        memcpy(data, pixels, static_cast<size_t>(imageSize));
-        vkUnmapMemory(*_p->device, stagingBufferMemory);
+            pixels
+        );
 
         stbi_image_free(pixels);
 
@@ -1418,33 +1358,24 @@ namespace vulkan_tutorial {
     }
 
     void hello_triangle_app::createVertexBuffer() {
-        VkDeviceSize bufferSize = sizeof(_vertices[0]) * _vertices.size();
+        VkDeviceSize buffer_size = sizeof(_vertices[0]) * _vertices.size();
 
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        createBuffer(
-            bufferSize,
+        vkf::VulkanBuffer staging_buffer(
+            _p->device.get(),
+            buffer_size,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer,
-            stagingBufferMemory
+            _vertices.data()
         );
-        void* data;
-        vkMapMemory(*_p->device, stagingBufferMemory, 0, bufferSize, 0, &data);
-        memcpy(data, _vertices.data(), static_cast<size_t>(bufferSize));
-        vkUnmapMemory(*_p->device, stagingBufferMemory);
 
-        createBuffer(
-            bufferSize,
+        _p->vertex_buffer.reset(new vkf::VulkanBuffer(
+            _p->device.get(),
+            buffer_size,
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            _vertexBuffer,
-            _vertexBufferMemory
-        );
-        copyBuffer(stagingBuffer, _vertexBuffer, bufferSize);
-
-        vkDestroyBuffer(*_p->device, stagingBuffer, nullptr);
-        vkFreeMemory(*_p->device, stagingBufferMemory, nullptr);
+            nullptr
+        ));
+        copyBuffer(&staging_buffer, _p->vertex_buffer, buffer_size);
     }
 
     VKAPI_ATTR VkBool32 VKAPI_CALL hello_triangle_app::debugCallback(

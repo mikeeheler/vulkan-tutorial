@@ -40,8 +40,12 @@ namespace vkf {
         VK_CHECK_RESULT(device->CreateBuffer(usage, 0, size, &_p->buffer, &_p->memory, data));
     }
 
+    VulkanBuffer::VulkanBuffer(VulkanBuffer&& other) : _p(std::move(other._p)) {
+    }
+
     VulkanBuffer::~VulkanBuffer() {
-        Destroy();
+        if (_p != nullptr)
+            Destroy();
     }
 
     VkDeviceSize VulkanBuffer::GetSize() const {
@@ -71,7 +75,7 @@ namespace vkf {
         memcpy(_p->mapped_memory, data, size);
     }
 
-    VkResult VulkanBuffer::Flush(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0) {
+    VkResult VulkanBuffer::Flush(VkDeviceSize size, VkDeviceSize offset) {
         VkMappedMemoryRange mapped_range {};
         mapped_range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
         mapped_range.memory = _p->memory;

@@ -15,6 +15,7 @@ namespace vkf {
             VkBufferUsageFlags flags,
             VkMemoryPropertyFlags memory_properties,
             void* data);
+        VulkanBuffer(VulkanBuffer&& other);
         ~VulkanBuffer();
 
         VkDeviceSize GetSize() const;
