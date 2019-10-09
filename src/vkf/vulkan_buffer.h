@@ -16,6 +16,7 @@ namespace vkf {
             VkMemoryPropertyFlags memory_properties,
             void* data);
         VulkanBuffer(VulkanBuffer&& other);
+        VulkanBuffer();
         ~VulkanBuffer();
 
         VkDeviceSize GetSize() const;
@@ -32,6 +33,8 @@ namespace vkf {
         operator VkBuffer() const;
         operator VkDeviceMemory();
         operator VkDeviceMemory() const;
+
+        VulkanBuffer& operator=(VulkanBuffer&& other);
 
     private:
         struct Impl; std::experimental::propagate_const<std::unique_ptr<Impl>> _p;

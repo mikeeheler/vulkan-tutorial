@@ -1268,13 +1268,13 @@ namespace vulkan_tutorial {
         _p->uniform_buffers.resize(_swapchainImages.size());
 
         for (size_t i = 0; i < _swapchainImages.size(); ++i) {
-            _p->uniform_buffers[i] = std::move(vkf::VulkanBuffer(
+            _p->uniform_buffers[i] = vkf::VulkanBuffer(
                 _p->device.get(),
                 bufferSize,
                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                 nullptr
-            ));
+            );
         }
     }
 
@@ -1318,13 +1318,10 @@ namespace vulkan_tutorial {
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             _mipLevels
         );
-        copyBufferToImage(stagingBuffer, _textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+        copyBufferToImage(staging_buffer, _textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
         // transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
 
         generateMipmaps(_textureImage, VK_FORMAT_R8G8B8A8_UNORM, texWidth, texHeight, _mipLevels);
-
-        vkDestroyBuffer(*_p->device, stagingBuffer, nullptr);
-        vkFreeMemory(*_p->device, stagingBufferMemory, nullptr);
     }
 
     void hello_triangle_app::createTextureImageView() {
@@ -1375,7 +1372,7 @@ namespace vulkan_tutorial {
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             nullptr
         ));
-        copyBuffer(&staging_buffer, _p->vertex_buffer, buffer_size);
+        copyBuffer(&staging_buffer, _p->vertex_buffer.get(), buffer_size);
     }
 
     VKAPI_ATTR VkBool32 VKAPI_CALL hello_triangle_app::debugCallback(
@@ -2069,9 +2066,8 @@ namespace vulkan_tutorial {
         );
         ubo.proj[1][1] *= -1;
 
-        void* data;
-        vkMapMemory(*_p->device, _uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
-        memcpy(data, &ubo, sizeof(ubo));
-        vkUnmapMemory(*_p->device, _uniformBuffersMemory[currentImage]);
+        _p->uniform_buffers[currentImage].Map(sizeof(ubo));
+        _p->uniform_buffers[currentImage].CopyTo(&ubo, sizeof(ubo));
+        _p->uniform_buffers[currentImage].Unmap();
     }
 }

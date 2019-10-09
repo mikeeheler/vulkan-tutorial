@@ -40,8 +40,8 @@ namespace vkf {
         VK_CHECK_RESULT(device->CreateBuffer(usage, 0, size, &_p->buffer, &_p->memory, data));
     }
 
-    VulkanBuffer::VulkanBuffer(VulkanBuffer&& other) : _p(std::move(other._p)) {
-    }
+    VulkanBuffer::VulkanBuffer(VulkanBuffer&& other) : _p(std::move(other._p)) {}
+    VulkanBuffer::VulkanBuffer() : _p(new Impl) {}
 
     VulkanBuffer::~VulkanBuffer() {
         if (_p != nullptr)
@@ -109,5 +109,11 @@ namespace vkf {
 
     VulkanBuffer::operator VkDeviceMemory() const {
         return _p->memory;
+    }
+
+    VulkanBuffer& VulkanBuffer::operator=(VulkanBuffer&& other) {
+        std::cout << "VulkanBuffer::move assign op" << std::endl;
+        _p = std::move(other._p);
+        return *this;
     }
 }

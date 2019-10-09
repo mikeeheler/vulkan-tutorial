@@ -15,6 +15,10 @@
 #define ENABLE_VALIDATION_LAYERS 1
 #endif
 
+namespace vkf {
+    class VulkanBuffer;
+}
+
 namespace vulkan_tutorial {
     struct queue_family_indices {
         std::optional<uint32_t> graphicsFamily;
